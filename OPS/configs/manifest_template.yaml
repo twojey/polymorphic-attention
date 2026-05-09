@@ -43,7 +43,7 @@ stack:
   torch: "2.6.x+cu128"
   lightning: "2.4.x"
   hydra: "1.3.x"
-  wandb: "0.18.x"
+  mlflow: "2.16.x"
   uv_lock_hash: sha256:...           # hash du uv.lock utilisé
 
 # --- Timing ---
@@ -52,15 +52,16 @@ finished_at: 2026-05-09T13:14:15Z
 duration_s: 11655
 
 # --- Logging ---
-wandb_run_id: <wandb_run_id>
-wandb_url: https://wandb.ai/<entity>/<project>/runs/<wandb_run_id>
+mlflow_experiment: phase1
+mlflow_run_id: <mlflow_run_id>
+mlflow_run_url: http://localhost:5000/#/experiments/<exp_id>/runs/<mlflow_run_id>
 artifacts:                            # optional, rempli si artefacts produits
   - name: oracle_smnist_v1
     type: model
-    wandb_artifact_id: <id>
+    mlflow_artifact_path: oracle_smnist_v1
   - name: attention_dump_smnist
     type: dataset
-    wandb_artifact_id: <id>
+    mlflow_artifact_path: attention_dump/
 
 # --- Verdict (optional, rempli après analyse) ---
 verdict:

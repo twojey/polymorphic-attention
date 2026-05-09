@@ -1,93 +1,145 @@
 # LOGGING.md — Outil de logging d'expérience
 
-**Statut** : décision prise (Stage 0.4, ROADMAP). W&B comme outil principal, complété par fichiers locaux pour la traçabilité offline.
+**Statut** : décision prise (Stage 0.4, ROADMAP). MLflow self-hosted sur le VPS, complété par fichiers locaux pour la traçabilité offline.
+
+**Aucun compte externe requis. Aucune donnée ne sort des deux machines.**
 
 ## Décision
 
 | Composant | Choix |
 |---|---|
-| Logging principal | **Weights & Biases (W&B)** |
+| Logging principal | **MLflow self-hosted sur le VPS** |
+| Backend store | SQLite (`OPS/logs/mlflow/mlflow.db`) |
+| Artifact store | Filesystem local sur VPS (`OPS/logs/mlflow/artifacts/`) |
 | Manifest de run local | Dump YAML dans `OPS/logs/manifests/<run_id>.yaml` |
 | Suivi compute (humain) | Markdown manuel dans `OPS/logs/compute_budget.md` (cf. T.2) |
-| Stockage artefacts (poids, matrices A, dictionnaire SCH) | W&B Artifacts |
+
+## Topologie
+
+```
+[Pod RunPod RTX 5090 — éphémère]            [VPS — persistant]
+        │                                          │
+   training script                            MLflow server
+   mlflow.log_metric()                        bind 127.0.0.1:5000
+        │                                          │
+        │  HTTP via tunnel SSH                     │  Backend  : sqlite
+        │  ssh -L 5000:localhost:5000 vps          │  Artifacts: filesystem
+        ▼                                          │
+   localhost:5000 ───────────────────────────────► │
+                                                   │
+                                            Browser local sur VPS
+                                            (ou tunnel SSH depuis poste)
+```
+
+Le pod ouvre un tunnel SSH vers le VPS au démarrage du training. MLflow client sur le pod cible `http://localhost:5000` qui est forwardé vers le serveur MLflow tournant sur le VPS.
+
+**Sécurité** : MLflow OSS n'a pas d'authentification. Le serveur **bind sur `127.0.0.1` exclusivement**, jamais exposé publiquement. L'accès passe par SSH (déjà authentifié).
 
 ## Justifications
 
-### Pourquoi W&B
+### Pourquoi MLflow self-hosted
 
-- **Topologie VPS + RunPod éphémère** : le pod est détruit régulièrement. Les fichiers TensorBoard/MLflow self-hosted seraient à copier manuellement à chaque arrêt. W&B sync vers le cloud en continu → consultable depuis le VPS sans intervention.
-- **Sweeps natifs** : phase 4 prévoit 5–7 valeurs de `λ_budget` log-spaced ; phase 5 prévoit 3 seeds × 4 tailles `N` × plusieurs comparateurs. Hydra + W&B sweep gèrent ça en une commande.
-- **Artifacts versionnés** : poids Oracle (par domaine), matrices d'attention extraites, dictionnaire SCH, checkpoints ASPLayer. Versionnés et liés au run qui les a produits → aucun doute sur la provenance d'un artefact.
-- **Comparaison cross-phase** : le projet produit ~6 phases × multiples runs × 4 sprints. W&B permet de filtrer/grouper/comparer sur des centaines de runs.
-- **Intégration Lightning Fabric** : `WandbLogger` natif, pas de glue code.
-- **Free tier académique** suffisant pour le volume estimé.
+- **Pas de compte externe.** Pas de signup, pas de tracking, pas de dépendance cloud.
+- **Topologie VPS + pod éphémère** résolue : le pod log vers le VPS persistant via SSH tunnel. Au reboot du pod, l'historique est intact côté VPS.
+- **Maturité** : MLflow est l'outil le plus utilisé en open-source pour ce cas. Doc large, communauté grande.
+- **Intégration Lightning Fabric** : `MLFlowLogger` fourni par Lightning, branchable en 3 lignes.
+- **Sweeps** : `Hydra --multirun` lance N runs séquentiels ou parallèles, chacun ouvre un `mlflow.start_run()` distinct. Suffisant pour les 5–7 valeurs de `λ_budget` phase 4.
+- **Artifacts versionnés** : `mlflow.log_artifact()` et `mlflow.log_model()` couvrent poids Oracle, matrices d'attention, dictionnaire SCH, checkpoints ASPLayer.
 
-### Pourquoi pas TensorBoard
+### Pourquoi pas Aim
 
-Pas d'artifact management, pas de sweeps, pas de collaboration, fichiers à copier manuellement depuis le pod. Dispo *en plus* via Fabric pour debug local rapide, jamais comme source de vérité.
+UI plus moderne mais écosystème plus petit, intégration Lightning moins documentée. Moins risqué de partir sur MLflow.
 
-### Pourquoi pas MLflow self-hosted
+### Pourquoi pas TensorBoard seul
 
-Demanderait un service hébergé sur le VPS, plus de surface à maintenir. Aucun gain par rapport à W&B sur ce projet.
+Pas d'artifact management, pas de comparaison cross-runs riche, fichiers à synchroniser manuellement depuis le pod éphémère.
 
-### Pourquoi pas fichiers locaux uniquement
+### Pourquoi pas W&B
 
-Incompatible avec la topologie pod éphémère. Et aucune comparaison/sweep automatique.
+Compte externe requis, données sortent des machines. Refusé par l'utilisateur.
 
-## Ce qui est loggé où
+## Lancement du serveur (sur le VPS)
 
-| Information | Cible |
-|---|---|
-| Métriques scalaires (loss, accuracy, ρ Spearman, etc.) | W&B `log` |
-| Histogrammes (distribution `r_eff`, `R_target`, etc.) | W&B `log` (mode histogram) |
-| Heatmaps (Stress-Rank Map, Diagramme de Phase) | W&B `log` (mode image) |
-| Poids Oracle (par domaine) | W&B Artifact, type `model` |
-| Matrices d'attention extraites (sous-échantillon) | W&B Artifact, type `dataset` |
-| Dictionnaire SCH (table régime → r_eff → classe) | W&B Artifact, type `dataset` |
-| Checkpoints ASPLayer | W&B Artifact, type `model` |
-| Manifest run (seed, commit, fingerprint hardware) | YAML local + W&B `config` |
-| Budget compute consolidé (GPU-hours par phase) | `OPS/logs/compute_budget.md` (édition humaine) |
-| Rapports de phase | `DOC/reports/phaseX_report.md` (commités) |
+```bash
+bash OPS/scripts/start_mlflow_server.sh
+```
 
-## Conventions de nommage des runs W&B
+Le script :
+1. Crée `OPS/logs/mlflow/{,artifacts}/` si absent
+2. Lance `mlflow server --host 127.0.0.1 --port 5000` avec backend SQLite et artifact store filesystem
+3. Bloque en foreground (utiliser `tmux`/`screen`/systemd pour lancer en arrière-plan)
 
-Format : `<phase>_<sprint>_<domaine>_<short_description>_<short_hash>`
+Le serveur tourne en permanence sur le VPS pendant le projet.
 
-Exemples :
-- `phase1_s1_smnist_oracle_baseline_a1b2c3d`
-- `phase1b_s1_smnist_signals_3sig_e4f5g6h`
-- `phase2_s2_smnist_audit_battA_i7j8k9l`
-- `phase4_s3_smnist_lambda_sweep_m1n2o3p`
+## Configuration du pod (au démarrage du training)
 
-Le `short_hash` est les 7 premiers caractères du commit git du repo au moment du run. Sans commit, pas de run (règle T.1).
+```bash
+# 1. Tunnel SSH vers le VPS (en arrière-plan)
+ssh -N -f -L 5000:127.0.0.1:5000 user@vps
 
-## Tags W&B obligatoires
+# 2. Pointer MLflow client vers le tunnel local
+export MLFLOW_TRACKING_URI=http://localhost:5000
 
-Chaque run doit porter au minimum :
+# 3. Lancer le training
+uv run python -m asp.phase1.train_oracle --config-name=oracle_smnist
+```
 
-- `phase:1` / `phase:1.5` / `phase:2` / `phase:3` / `phase:4` / `phase:5`
-- `sprint:1` / `sprint:2` / `sprint:3` / `sprint:4`
-- `domain:smnist` / `domain:code` / `domain:vision`
-- `oracle:<oracle_id>` (phases 2+)
-- `status:exploratory` ou `status:registered` — un run `registered` correspond à une config pré-enregistrée non modifiée (cf. règle T.1). Les runs `exploratory` ne comptent jamais comme preuve dans un rapport de phase.
+`setup_env.sh` vérifie que `MLFLOW_TRACKING_URI` est set, mais n'ouvre pas le tunnel automatiquement (clé SSH = responsabilité utilisateur).
+
+## Conventions de nommage des runs MLflow
+
+- **Experiment name** = `phase<N>` (ex. `phase1`, `phase1.5`, `phase2`)
+- **Run name** = `<sprint>_<domaine>_<short_description>_<git_short_hash>`
+  - Exemple : `s1_smnist_oracle_baseline_a1b2c3d`
+- Le `git_short_hash` est les 7 premiers caractères du commit du repo au moment du run. Sans commit clean, pas de run "registered" (règle T.1).
+
+## Tags MLflow obligatoires
+
+À chaque run, via `mlflow.set_tags({...})` :
+
+- `phase` : `1` / `1.5` / `2` / `3` / `4` / `5`
+- `sprint` : `1` / `2` / `3` / `4`
+- `domain` : `smnist` / `code` / `vision`
+- `oracle_id` : id de l'Oracle utilisé (phases 2+, sinon vide)
+- `status` :
+  - `exploratory` — run libre, jamais cité comme preuve dans un rapport de phase
+  - `registered` — run reproductible à partir d'un commit clean, citable comme preuve
+  - `invalidated` — run pré-enregistré dont la config a été modifiée a posteriori → invalidé
 
 ## Articulation avec `OPS/logs/`
 
-- `OPS/logs/` est **gitignored** sauf `compute_budget.md` qui est commité.
-- `OPS/logs/manifests/<run_id>.yaml` : copie locale du manifest, utile en cas de perte d'accès W&B.
-- `OPS/logs/runs_index.csv` : index humain des runs majeurs avec colonnes `run_id, phase, sprint, date, status, verdict`. Édité à la main après chaque run de référence.
+```
+OPS/logs/
+├── compute_budget.md         # commité, suivi humain GPU-h
+├── runs_index.csv            # commité, index humain des runs majeurs
+├── manifests/                # commité (.gitkeep)
+│   └── <run_id>.yaml         # un par run, copie locale du manifest
+└── mlflow/                   # gitignored
+    ├── mlflow.db
+    └── artifacts/
+```
 
-## Pré-enregistrement et W&B
+- `OPS/logs/mlflow/` : gitignored, vit sur le VPS exclusivement.
+- `OPS/logs/manifests/<run_id>.yaml` : commité, copie statique du manifest. Sauvegarde si la base MLflow est corrompue.
+- `OPS/logs/runs_index.csv` : édité à la main après chaque run de référence (`run_id, phase, sprint, date, status, verdict`).
 
-Règle T.1 (pré-enregistrement) impose que tous les seuils soient fixés avant la phase. Articulation avec W&B :
+## Pré-enregistrement et MLflow
+
+Règle T.1 (pré-enregistrement) impose que tous les seuils soient fixés avant la phase. Articulation :
 
 1. La config Hydra du run est commitée **avant** le run (commit dédié, message `pre-register: phaseX <description>`).
-2. Le `short_hash` du nom de run pointe vers ce commit.
-3. Le run est lancé avec `tags=[..., "status:registered"]`.
-4. Toute modification post-run → nouveau commit, nouveau run, ancien run annulé (jamais supprimé, marqué `status:invalidated` via `wandb.run.tags.add(...)` ou re-tag manuel).
+2. Le `git_short_hash` du nom de run pointe vers ce commit.
+3. Le run est lancé avec `tags={"status": "registered"}` ; le code refuse de lancer si `git status` est dirty.
+4. Toute modification post-run → nouveau commit, nouveau run, ancien run re-tagué `status:invalidated` via `mlflow.set_tag("status", "invalidated")`.
 
-## Sécurité
+## Sauvegarde du serveur MLflow
 
-- Token W&B injecté via env var `WANDB_API_KEY` au démarrage du pod. Jamais commité.
-- Pas de données utilisateur, pas de PII dans les datasets → mode cloud public W&B acceptable.
-- Si plus tard un dataset sensible est introduit (peu probable : SSG + corpus synthétiques), basculer sur mode privé W&B ou self-hosted.
+Le VPS persiste mais peut tomber. Sauvegarde manuelle recommandée :
+
+- Snapshot quotidien de `OPS/logs/mlflow/` (rsync vers stockage externe, ou snapshot du VPS).
+- Pas de réplication active à ce stade — single-user, projet de recherche, RPO 24h acceptable.
+
+## Évolutions possibles
+
+- Si le projet implique de la collaboration : ajouter Caddy/nginx + basic auth devant MLflow, ou bascule vers Tailscale pour la mesh privée.
+- Si le volume d'artifacts dépasse l'espace VPS : déplacer `default-artifact-root` vers un bucket S3-compatible self-hosted (MinIO).

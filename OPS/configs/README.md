@@ -68,25 +68,25 @@ uv run python -m asp.phase1.train_oracle \
 
 ## Pré-enregistrement (règle T.1)
 
-Toute config "registered" doit être commitée **avant** le run. Le run pointe vers le commit via le `git_short_hash` dans le run W&B et dans le manifest local. Une config modifiée après run est **copiée et renommée** (`oracle_smnist_v2.yaml`), jamais écrasée.
+Toute config "registered" doit être commitée **avant** le run. Le run pointe vers le commit via le `git_short_hash` dans le run name MLflow et dans le manifest local. Une config modifiée après run est **copiée et renommée** (`oracle_smnist_v2.yaml`), jamais écrasée.
 
-Tags W&B associés :
-- `status:exploratory` → run libre, jamais cité dans un rapport de phase
-- `status:registered`  → run reproductible à partir d'un commit, citable comme preuve
-- `status:invalidated` → run pré-enregistré dont la config a été modifiée a posteriori → invalidé
+Tags MLflow associés (via `mlflow.set_tag("status", ...)`) :
+- `exploratory` → run libre, jamais cité dans un rapport de phase
+- `registered`  → run reproductible à partir d'un commit, citable comme preuve
+- `invalidated` → run pré-enregistré dont la config a été modifiée a posteriori → invalidé
 
 ## Manifest de run
 
 À chaque run, un manifest YAML est produit et commité dans `OPS/logs/manifests/<run_id>.yaml` (cf. `manifest_template.yaml`). Champs obligatoires :
 
-- `run_id` (≡ nom W&B)
+- `run_id` (≡ run name MLflow)
 - `git_commit` (hash long)
-- `git_short_hash` (7 chars, présent dans le nom W&B)
+- `git_short_hash` (7 chars, présent dans le run name MLflow)
 - `seed`
 - `phase`, `sprint`, `domain`
 - `hardware` (gpu, vram, cuda, driver, pod_id)
 - `started_at`, `finished_at`, `duration_s`
-- `wandb_url`
+- `mlflow_run_id` + `mlflow_experiment`
 - `data_hash` (hash des données utilisées, anti-fuite)
 - `status` (`registered`, `exploratory`, `invalidated`)
 

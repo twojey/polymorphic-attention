@@ -24,9 +24,8 @@ OPS/
 - **Pré-enregistrement.** Les configs de toutes les phases sont versionnées *avant* le lancement (cf. règle 4 de DOC/falsifiabilite.md). Une config modifiée après run doit être copiée et renommée, jamais écrasée.
 - **Reproductibilité.** Chaque run produit un manifest (seed, commit, fingerprint hardware, durée, hash des données). Sans manifest, le résultat ne compte pas.
 
-## À faire post-phase 1
+## Décisions cadres (Stage 0)
 
-Choisir et documenter ici :
-- Outil de gestion d'environnement (uv, poetry, conda, container OCI).
-- Outil de logging d'expérience (wandb, mlflow, tensorboard, fichiers locaux).
-- Conventions de nommage des runs et artefacts.
+- **Environnement** : uv + `pyproject.toml` + `uv.lock` commité. Détails : `env/STACK.md`.
+- **Logging** : MLflow self-hosted sur le VPS. Détails : `env/LOGGING.md`.
+- **Conventions de nommage** : `<sprint>_<domaine>_<short_description>_<git_short_hash>` (cf. `env/LOGGING.md` § Conventions).

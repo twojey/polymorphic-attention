@@ -25,7 +25,7 @@ Une fois Stage 0.2 validé : ouverture du Sprint 1 (phase 1 sur Structure-MNIST 
 Décisions cadres prises (Sprint 1) :
 - **0.1 Stack** : PyTorch 2.6+ + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`.
 - **0.3 Hardware** : VPS (édition / lecture résultats) + RunPod RTX 5090 32 GB éphémère (training). Détails dans `OPS/env/HARDWARE.md`.
-- **0.4 Logging** : Weights & Biases comme outil principal, manifests YAML locaux pour traçabilité offline. Détails dans `OPS/env/LOGGING.md`.
+- **0.4 Logging** : MLflow self-hosted sur le VPS (zéro compte externe, aucune donnée ne sort des machines), manifests YAML locaux pour traçabilité offline. Détails dans `OPS/env/LOGGING.md`.
 
 0.2 (famille Backbone) a été retirée — le Backbone est dérivé en phase 3, pas pré-sélectionné. Le 0.2 actuel concerne la disponibilité des primitives mathématiques.
 
@@ -70,24 +70,25 @@ Tout ce qui doit être fixé **avant** d'écrire la première ligne de code.
 - [x] Documenté dans `OPS/env/HARDWARE.md` (CUDA 12.8, contraintes Blackwell sm_120, contraintes pod éphémère)
 
 ### 0.4 — Outil de logging ✅
-- [x] Choix : **Weights & Biases** (sweeps natifs, artifacts versionnés, sync cloud compatible pod éphémère)
-- [x] Justifié dans `OPS/env/LOGGING.md` (conventions de nommage, tags obligatoires, articulation pré-enregistrement)
+- [x] Choix : **MLflow self-hosted sur le VPS** (zéro compte externe, accès pod via tunnel SSH, sweeps via Hydra multirun)
+- [x] Justifié dans `OPS/env/LOGGING.md` (topologie, conventions de nommage, tags obligatoires, articulation pré-enregistrement)
+- [x] `OPS/scripts/start_mlflow_server.sh` (lance MLflow sur 127.0.0.1:5000 avec backend SQLite + filesystem artifacts)
 
 ### 0.5 — Infrastructure environnement ✅ (partiel)
-- [x] `pyproject.toml` créé (deps Lightning Fabric, Hydra, W&B, etc.) avec extras `cpu`/`cuda`/`dev`
-- [x] `uv.lock` généré (99 packages résolus, 8 entrées torch multi-plateforme/CUDA)
-- [x] `OPS/scripts/setup_env.sh` idempotent (auto-détection GPU, install uv, sync, vérif torch, login W&B)
+- [x] `pyproject.toml` créé (deps Lightning Fabric, Hydra, MLflow, etc.) avec extras `cpu`/`cuda`/`dev`
+- [x] `uv.lock` généré (résolution réussie, entrées torch multi-plateforme/CUDA)
+- [x] `OPS/scripts/setup_env.sh` idempotent (auto-détection GPU, install uv, sync, vérif torch, vérif MLFLOW_TRACKING_URI)
 - [ ] **À tester sur le pod RunPod RTX 5090** — Stage 0.2 prérequis
 
 ### 0.6 — Versioning ✅
 - [x] `git init` à la racine du projet (branche `master`, identité locale `synthetic-attention <nuriion01@gmail.com>`)
-- [x] `.gitignore` : Python, ML (W&B, checkpoints, datasets), env (anchored), IDE, OS, exception `OPS/logs/compute_budget.md`
+- [x] `.gitignore` : Python, ML (mlruns, checkpoints, datasets), env (anchored), IDE, OS, exception `OPS/logs/compute_budget.md`
 - [x] Premier commit `init: spec V3.5 ASP + décisions cadres Sprint 1` (23 fichiers, 2770 insertions)
 
 ### 0.7 — OPS/configs squelette ✅
 - [x] `OPS/configs/phase1/`, `phase1b/`, `phase2/`, `phase3/`, `phase4/`, `phase5/` (avec `.gitkeep`)
 - [x] Format YAML + composition Hydra documenté dans `OPS/configs/README.md`
-- [x] `OPS/configs/manifest_template.yaml` (run_id, git_commit, hardware, stack, timing, wandb)
+- [x] `OPS/configs/manifest_template.yaml` (run_id, git_commit, hardware, stack, timing, mlflow)
 - [x] `OPS/logs/compute_budget.md` initialisé (estimations Sprint 1, plafonds par phase)
 
 ---

@@ -73,7 +73,7 @@ Documenter les résultats dans `OPS/env/PRIMITIVES.md` (à créer Stage 0.2).
 ## Pinning et reproductibilité
 
 - `pyproject.toml` géré par uv, lockfile `uv.lock` commité.
-- Versions exactes pinnées pour : `torch`, `lightning`, `hydra-core`, `numpy`, `wandb`. Le reste : ranges majeurs.
+- Versions exactes pinnées pour : `torch`, `lightning`, `hydra-core`, `numpy`, `mlflow`. Le reste : ranges majeurs.
 - Une expérience commitée doit être rejouable à `uv sync && python -m ...` sans intervention manuelle.
 
 ## Évolutions prévisibles

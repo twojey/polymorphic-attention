@@ -86,13 +86,27 @@ if torch.cuda.is_available():
 PY
 
 # ----------------------------------------------------------------
-# 6. W&B login (interactif si nécessaire)
+# 6. Vérification MLFLOW_TRACKING_URI
 # ----------------------------------------------------------------
-if [[ -n "${WANDB_API_KEY:-}" ]]; then
-  echo "==> WANDB_API_KEY présent, login non interactif"
-  uv run wandb login --relogin "$WANDB_API_KEY" >/dev/null 2>&1 || true
+# MLflow self-hosted sur le VPS. Sur le pod, il faut que le tunnel SSH
+# vers le VPS soit ouvert (cf. OPS/env/LOGGING.md § Configuration du pod)
+# et que MLFLOW_TRACKING_URI pointe vers le tunnel local.
+if [[ -z "${MLFLOW_TRACKING_URI:-}" ]]; then
+  echo "==> MLFLOW_TRACKING_URI absent."
+  if [[ "$ASP_CUDA" == "1" ]]; then
+    echo "    Sur le pod, ouvrir le tunnel SSH puis :"
+    echo "    export MLFLOW_TRACKING_URI=http://localhost:5000"
+  else
+    echo "    Sur le VPS, MLflow tourne via OPS/scripts/start_mlflow_server.sh"
+    echo "    export MLFLOW_TRACKING_URI=http://127.0.0.1:5000"
+  fi
 else
-  echo "==> WANDB_API_KEY absent. Login manuel requis : 'uv run wandb login'"
+  echo "==> MLFLOW_TRACKING_URI = $MLFLOW_TRACKING_URI"
+  if uv run python -c "import mlflow; mlflow.MlflowClient().search_experiments()" 2>/dev/null; then
+    echo "    Connexion MLflow OK."
+  else
+    echo "    AVERTISSEMENT : MLflow URI set mais serveur injoignable." >&2
+  fi
 fi
 
 echo "==> Setup terminé."

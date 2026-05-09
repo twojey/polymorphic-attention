@@ -46,7 +46,6 @@ ehthumbs.db
 .ipynb_checkpoints/
 
 # --- Logging d'expériences ---
-wandb/
 mlruns/
 runs/
 tensorboard/

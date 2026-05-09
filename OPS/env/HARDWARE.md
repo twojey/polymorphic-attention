@@ -6,7 +6,7 @@
 
 | Machine | Rôle | Persistance |
 |---|---|---|
-| **VPS** | Édition code, édition doc, lecture résultats W&B, push git, lancements de runs distants | Persistante, contient le repo source |
+| **VPS** | Édition code, édition doc, **serveur MLflow** (cf. LOGGING.md), push git, lancements de runs distants | Persistante, contient le repo source et la base MLflow |
 | **RunPod RTX 5090** | Training, extraction, audit spectral, calibration spectromètre | **Éphémère** — disque détruit à l'arrêt du pod |
 
 Aucun training sur le VPS. Aucune édition long-terme sur le pod.
@@ -50,7 +50,7 @@ Aucun training sur le VPS. Aucune édition long-terme sur le pod.
 Le pod est détruit à chaque arrêt. Conséquences strictes :
 
 1. **`OPS/scripts/setup_env.sh` doit être idempotent** et restaurer l'environnement à zéro depuis le repo + lockfile uv.
-2. **Tous les artefacts persistants vivent ailleurs** : poids Oracle, matrices `A`, dictionnaire SCH → W&B Artifacts (cf. LOGGING.md). Jamais sur le disque du pod seul.
+2. **Tous les artefacts persistants vivent ailleurs** : poids Oracle, matrices `A`, dictionnaire SCH → MLflow artifacts sur le VPS via `mlflow.log_artifact()` (cf. LOGGING.md). Jamais sur le disque du pod seul.
 3. **Pas de modification de l'environnement à la main sur le pod.** Toute modification → édition de `setup_env.sh` ou du `pyproject.toml`, push, re-pull, re-sync.
 4. **Le repo est cloné depuis git** au démarrage du pod, pas synchronisé manuellement. Travail en cours non commité = perdu.
 
@@ -78,5 +78,5 @@ Si `nvidia-smi` reporte un GPU différent (pod réassigné), abandonner le run e
 
 ## Sécurité opérationnelle
 
-- Token W&B, clés SSH RunPod, etc. : variables d'environnement injectées au démarrage du pod, **jamais commitées**.
-- Le `.gitignore` couvre `.env`, `*.key`, `wandb/`, `OPS/logs/`, `**/checkpoints/`. Vérifier au Stage 0.6.
+- Clés SSH (pour le tunnel pod→VPS), `MLFLOW_TRACKING_URI` : variables d'environnement injectées au démarrage du pod, **jamais commitées**.
+- Le `.gitignore` couvre `.env`, `*.key`, `OPS/logs/mlflow/`, `mlruns/`, `OPS/logs/` (sauf compute_budget.md, runs_index.csv, manifests/), `**/checkpoints/`. Vérifier au Stage 0.6.
