@@ -67,6 +67,8 @@ datasets/
 OPS/logs/*
 !OPS/logs/compute_budget.md
 !OPS/logs/runs_index.csv
+!OPS/logs/manifests/
+OPS/logs/manifests/*
 !OPS/logs/manifests/.gitkeep
 
 # --- Tests / coverage ---

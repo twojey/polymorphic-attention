@@ -1,0 +1,68 @@
+# Template de manifest de run — projet ASP
+#
+# Produit automatiquement à chaque run par le script de lancement, copié
+# dans OPS/logs/manifests/<run_id>.yaml. Sans manifest, le résultat ne
+# compte pas (cf. OPS/README.md, règle de reproductibilité).
+#
+# Tous les champs sont obligatoires sauf marqués "optional".
+
+run_id: phase1_s1_smnist_oracle_baseline_a1b2c3d
+status: registered    # registered | exploratory | invalidated
+
+# --- Versioning ---
+git_commit: 0000000000000000000000000000000000000000
+git_short_hash: a1b2c3d
+git_branch: master
+git_dirty: false      # si true, le run est forcément exploratory
+
+# --- Phase / sprint / domaine ---
+phase: "1"            # "1" | "1.5" | "2" | "3" | "4" | "5"
+sprint: 1             # 1 | 2 | 3 | 4
+domain: smnist        # smnist | code | vision
+oracle_id: null       # null en phase 1 ; <oracle_id> aux phases 2+
+
+# --- Reproductibilité ---
+seed: 42
+config_path: OPS/configs/phase1/oracle_smnist.yaml
+config_overrides: []  # liste des overrides Hydra ligne de commande
+data_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+# --- Hardware ---
+hardware:
+  gpu: NVIDIA GeForce RTX 5090
+  vram_gb: 32
+  cuda: "12.8"
+  driver: "555.xx"
+  pod_id: <runpod_pod_id>            # null sur VPS
+  pod_started_at: 2026-05-09T10:00:00Z
+  hostname: <hostname>
+
+# --- Stack ---
+stack:
+  python: "3.11.x"
+  torch: "2.6.x+cu128"
+  lightning: "2.4.x"
+  hydra: "1.3.x"
+  wandb: "0.18.x"
+  uv_lock_hash: sha256:...           # hash du uv.lock utilisé
+
+# --- Timing ---
+started_at: 2026-05-09T10:00:00Z
+finished_at: 2026-05-09T13:14:15Z
+duration_s: 11655
+
+# --- Logging ---
+wandb_run_id: <wandb_run_id>
+wandb_url: https://wandb.ai/<entity>/<project>/runs/<wandb_run_id>
+artifacts:                            # optional, rempli si artefacts produits
+  - name: oracle_smnist_v1
+    type: model
+    wandb_artifact_id: <id>
+  - name: attention_dump_smnist
+    type: dataset
+    wandb_artifact_id: <id>
+
+# --- Verdict (optional, rempli après analyse) ---
+verdict:
+  outcome: null                       # passed | failed | inconclusive | null
+  notes: null                         # texte libre, brève synthèse

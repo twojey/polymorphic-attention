@@ -16,7 +16,11 @@ Les phases 4 et 5 répondent à la question secondaire (l'ASP-couche est-elle pr
 
 **Approche recommandée** : sprint-based, minimum viable d'abord (cf. fin de ce document, section "Stratégie de stratification").
 
-**Prochaine action immédiate** : Stage 0.2 — valider les primitives structurées sur RTX 5090 (cf. `OPS/env/STACK.md` § Primitives à valider), puis Stage 0.5 (env reproductible) et Stage 0.6 (git init).
+**Prochaine action immédiate** : Stage 0.2 — sur le pod RunPod RTX 5090 :
+1. Cloner le repo, exécuter `bash OPS/scripts/setup_env.sh` (test de Stage 0.5 sur la machine cible).
+2. Valider les primitives mathématiques listées dans `OPS/env/STACK.md` § Primitives à valider, documenter les résultats dans `OPS/env/PRIMITIVES.md`.
+
+Une fois Stage 0.2 validé : ouverture du Sprint 1 (phase 1 sur Structure-MNIST seul, multi-Oracle reporté à Sprint 4).
 
 Décisions cadres prises (Sprint 1) :
 - **0.1 Stack** : PyTorch 2.6+ + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`.
@@ -69,20 +73,22 @@ Tout ce qui doit être fixé **avant** d'écrire la première ligne de code.
 - [x] Choix : **Weights & Biases** (sweeps natifs, artifacts versionnés, sync cloud compatible pod éphémère)
 - [x] Justifié dans `OPS/env/LOGGING.md` (conventions de nommage, tags obligatoires, articulation pré-enregistrement)
 
-### 0.5 — Infrastructure environnement
-- [ ] 🔁 Initialiser `OPS/env/` avec lockfile de la stack (uv, poetry, conda, container OCI)
-- [ ] Créer `OPS/scripts/` avec un script `setup_env.sh` reproductible
-- [ ] Tester l'install à partir de zéro sur la machine cible
+### 0.5 — Infrastructure environnement ✅ (partiel)
+- [x] `pyproject.toml` créé (deps Lightning Fabric, Hydra, W&B, etc.) avec extras `cpu`/`cuda`/`dev`
+- [x] `uv.lock` généré (99 packages résolus, 8 entrées torch multi-plateforme/CUDA)
+- [x] `OPS/scripts/setup_env.sh` idempotent (auto-détection GPU, install uv, sync, vérif torch, login W&B)
+- [ ] **À tester sur le pod RunPod RTX 5090** — Stage 0.2 prérequis
 
-### 0.6 — Versioning
-- [ ] `git init` à la racine du projet
-- [ ] Créer `.gitignore` (logs, weights, datasets cache, venv, etc.)
-- [ ] Premier commit : tout l'état actuel de DOC/, CODE/, OPS/, ROADMAP.md
+### 0.6 — Versioning ✅
+- [x] `git init` à la racine du projet (branche `master`, identité locale `synthetic-attention <nuriion01@gmail.com>`)
+- [x] `.gitignore` : Python, ML (W&B, checkpoints, datasets), env (anchored), IDE, OS, exception `OPS/logs/compute_budget.md`
+- [x] Premier commit `init: spec V3.5 ASP + décisions cadres Sprint 1` (23 fichiers, 2770 insertions)
 
-### 0.7 — OPS/configs squelette
-- [ ] Créer `OPS/configs/phase1/`, `phase1b/`, `phase2/`, etc.
-- [ ] Définir un format de config commun (yaml ou toml)
-- [ ] Template de manifest de run (seed, commit, fingerprint hardware, durée)
+### 0.7 — OPS/configs squelette ✅
+- [x] `OPS/configs/phase1/`, `phase1b/`, `phase2/`, `phase3/`, `phase4/`, `phase5/` (avec `.gitkeep`)
+- [x] Format YAML + composition Hydra documenté dans `OPS/configs/README.md`
+- [x] `OPS/configs/manifest_template.yaml` (run_id, git_commit, hardware, stack, timing, wandb)
+- [x] `OPS/logs/compute_budget.md` initialisé (estimations Sprint 1, plafonds par phase)
 
 ---
 
