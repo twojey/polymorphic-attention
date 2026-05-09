@@ -1,0 +1,47 @@
+# Phase 3 — ASPLayer. Sprint 2.
+# Spec : DOC/03. Pré-enregistré (T.1).
+#
+# IMPORTANT : la classe Backbone (toeplitz / hankel / cauchy / composite) est
+# déterminée APRÈS phase 2 sur la base du dictionnaire SCH. Champ
+# `backbone.class_name` à overrider après phase 2.
+
+defaults:
+  - _self_
+
+domain: smnist
+sprint: 2
+
+# --- Backbone (à raffiner post-phase-2) ---
+backbone:
+  class_name: identity      # placeholder. À remplacer après phase 2.
+  params: {}                # paramètres spécifiques à la classe (ex. nombre de modes)
+
+# --- ASPLayer ---
+asp_layer:
+  d_model: 256
+  R_max: 32                 # à raffiner via recommandation phase 1 (R_max preliminaire)
+  soft_mask_beta: 4.0
+  layernorm: true
+  init_strategy: xavier     # xavier | orthogonal | smart (post-phase-2.6)
+
+# --- Losses ---
+loss:
+  matriochka:
+    n_rank_samples: 4
+    weight_strategy: uniform   # uniform | decreasing
+    rank_schedule:             # rangs forcés systématiquement présents
+      - R_max
+      - R_max_half
+      - R_max_quarter
+  consistency:
+    weight: 0.1
+    n_samples: 4
+    delta: 1
+  task:
+    type: cross_entropy
+
+# --- Sanity checks (DOC/03 §3.6) ---
+sanity:
+  saturation_tolerance: 0.10
+  smoothness_max_jump: 0.5
+  rank_grid_steps: 8

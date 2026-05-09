@@ -1,0 +1,67 @@
+# Phase 4 — Spectromètre + Curriculum + distillation. Sprint 3.
+# Spec : DOC/04. Pré-enregistré (T.1).
+
+defaults:
+  - _self_
+
+domain: smnist
+sprint: 3
+
+# --- Spectromètre (à instancier post-phase-1.5 avec input_dim variable) ---
+spectrometer:
+  hidden_dim: 64
+  n_layers: 2
+  dropout: 0.0
+  output_mode: alpha        # alpha (∈ [0,1]) ou logits
+
+# --- Curriculum 3 étages (DOC/04 §2) ---
+curriculum:
+  stages:
+    - name: easy
+      omega_max: 2
+      delta_max: 16
+      entropy_max: 0.2
+      transition_acc: 0.95
+      min_steps: 200
+    - name: intermediate
+      omega_max: 6
+      delta_max: 256
+      entropy_max: 0.5
+      transition_acc: 0.90
+      min_steps: 300
+    - name: hard
+      omega_max: 12
+      delta_max: 4096
+      entropy_max: 1.0
+      transition_acc: 0.0
+      min_steps: 500
+
+# --- Phase 4a (warm-up + distillation V3.5) ---
+phase_4a:
+  enabled: true
+  distillation:
+    use_p75: true             # cible de distillation = p75 du r_eff Oracle
+    asymmetric_gamma: 0.2     # ∈ [0.1, 0.3]. Sous-allocation pénalisée plus fort.
+  freeze_spectrometer_at_alpha_one: true   # spectromètre figé à α=1 au début
+
+# --- Phase 4b (autonome) ---
+phase_4b:
+  lambda_distil: 0.0           # retrait total
+  drift_max_first_n_steps: 0.30
+  first_n_steps: 100
+
+# --- Transition 4a → 4b ---
+transition:
+  loss_window: 50
+  loss_tolerance: 1.0e-3
+  rho_threshold: 0.80
+  plateau_var_min: 0.5
+
+# --- λ_budget sweep (DOC/04 §2) ---
+lambda_budget:
+  values: [0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0]   # 7 valeurs log-spaced
+  sweep: true                 # Hydra --multirun
+
+# --- L_sparsity ---
+sparsity:
+  weight_strategy: linear     # uniform | linear | exponential

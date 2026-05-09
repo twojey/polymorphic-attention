@@ -1,0 +1,40 @@
+# Phase 2 — Audit Spectral. Sprint 2, Structure-MNIST.
+# Spec : DOC/02. Pré-enregistré (règle T.1).
+
+defaults:
+  - _self_
+  - thresholds_phase2: thresholds_phase2
+
+domain: smnist
+sprint: 2
+seed: 1000
+
+# --- SVD ---
+theta: 0.99    # r_eff(θ) cible. ε_target sur A pré-enregistré.
+
+# --- Loi de transfert ---
+transfer_law:
+  min_r2: 0.50
+  log1p_safety: true
+
+# --- Diagnostic spécialisation des têtes (DOC/02 §5b) ---
+head_specialization:
+  dormant_threshold: 0.5            # mean(r_eff) < seuil → candidat dormant
+  spec_dormant_threshold: 0.1       # var(r_eff) < seuil → candidat dormant
+  top_k: 8                          # têtes à reporter dans le rapport
+
+# --- Batteries (DOC/02 §5c) ---
+batteries:
+  enabled:
+    - A
+    - B
+    - D
+    # C reporté à Sprint 4 (multi-Oracle requis)
+  max_examples_per_layer: 32        # pour limiter le coût
+  log_top_n: 10                     # top régimes loggés en métrique
+  orphan_threshold: 0.30            # ε_min > 0.30 → orphelin
+  asymmetry_threshold: 0.50
+
+# --- Go/no-go phase 2 (DOC/02 §2.8) ---
+go_no_go:
+  max_orphan_ratio: 0.20            # < 20% des régimes orphelins → SCH corroborée faible

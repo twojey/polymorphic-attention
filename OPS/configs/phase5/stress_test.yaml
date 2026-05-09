@@ -1,0 +1,77 @@
+# Phase 5 — Stress Test final. Sprint 4.
+# Spec : DOC/05. Pré-enregistré (T.1).
+
+defaults:
+  - _self_
+
+domain: smnist
+sprint: 4
+
+# --- Test 5a Identifiabilité ---
+test_5a:
+  # 5a.i — anti-fraude
+  anti_fraud:
+    floor_threshold: 1.0      # R_target médian sur bruit ≤ 1.0
+    n_examples: 256
+  # 5a.ii — différentiel V3.5
+  differential:
+    threshold_active: 1.0     # diff_score > 1.0 → spectromètre actif
+    threshold_silent: 0.1     # < 0.1 → silencieux (fail)
+    conditions:
+      - noise              # bruit blanc
+      - "null"              # null/empty
+      - trivial            # répétition triviale
+      - structured         # input structuré
+
+# --- Test 5b Élasticité ---
+test_5b:
+  threshold: 2.0              # seuil R_target pour détection activation
+  max_lag: 8                  # tokens
+  symmetry_tolerance: 3
+  n_sandwich_examples: 64
+
+# --- Test 5c SE/HT ---
+test_5c:
+  se_target_factor: 2.0       # SE_ASP ≥ 2 × SE_Transformer
+  ht_min_ratio: 1.0           # HT_ASP ≥ HT_SSM
+  n_warmup_inference: 5
+  n_repeat_inference: 20
+
+# --- Test 5d Pareto ---
+test_5d:
+  comparators:                # à instancier post-phase-3 selon backbone retenu
+    sequence:
+      - transformer_dense
+      - mod                   # MoD baseline principale (ROADMAP 5.4)
+      # mamba2/linear_attention/hyena_rwkv : actif si backbone non-Hankel
+    vision: []                # Sprint 5 si évalué
+    code: []                  # Sprint 5 si évalué
+
+# --- Test 5e OOD croisé ---
+test_5e:
+  elevation_threshold: 1.2     # R_target_eval / R_target_train ≥ 1.2
+
+# --- Test 6c R_max/2 ---
+test_6c:
+  enabled: true                # OBLIGATOIRE pour claim "ASP > Oracle"
+  strict_threshold: 0.95
+  partial_threshold: 0.80
+
+# --- Suite d'évaluation (ROADMAP 5.5) ---
+evaluation:
+  seeds: [42, 43, 44]
+  N_values: [1024, 4096, 16384, 65536]   # 2^10, 2^12, 2^14, 2^16
+  benchmarks:
+    - structure_mnist_ood
+    - lra
+    - needle_haystack
+    - induction_heads
+    - lm_subsample
+
+# --- Ablations ---
+ablations:
+  - asp_with_alpha_frozen_one
+  - asp_with_alpha_frozen_zero
+  - asp_no_curriculum
+  - asp_no_distillation_4a
+  - asp_no_loss_consistency

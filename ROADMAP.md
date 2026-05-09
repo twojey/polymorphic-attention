@@ -21,7 +21,16 @@ Les phases 4 et 5 répondent à la question secondaire (l'ASP-couche est-elle pr
 2. Stage 0.2 : `PYTHONPATH=CODE uv run python OPS/scripts/validate_primitives.py`. Coller la sortie dans `OPS/env/PRIMITIVES.md`.
 3. Sprint 1 phase 1 : `PYTHONPATH=CODE uv run python -m phase1_metrologie.run --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist`.
 
-**Pré-prep VPS terminée** : code phase 1 + 1.5 prêt et testé (31 tests passent en CPU), configs Hydra pré-enregistrées, validate_primitives prêt, MLflow server testable.
+**Pré-prep VPS maximale terminée** : 108 tests CPU passent.
+- Phase 1 (SSG + Oracle + extraction + métriques + sweeps + report) ✅
+- Phase 1.5 (3 signaux + agrégation + bench + Spearman + distillabilité + driver) ✅
+- Phase 2 (SVD pipeline + Stress-Rank Map + loi de transfert + spec heads + batteries A/B/D + driver) ✅
+- Phase 3 STRUCTUREL (Soft-Mask + STE + Matriochka + L_matriochka + L_consistency + ASPLayer + sanity checks + Backbone abstrait) ✅
+- Phase 4 STRUCTUREL (Spectromètre + Curriculum + distillation V3.5 p75 asymétrique + L_sparsity + Diagramme Phase + Pareto λ) ✅
+- Phase 5 STRUCTUREL (5a anti-fraude + 5a.ii différentiel + 5b lag + 5c SE/HT + 5d Pareto + 5e OOD + 6c R_max/2) ✅
+- Configs Hydra phase 1/1.5/2/3/4/5 pré-enregistrées ✅
+- Templates rapports phase 1/1.5/2/3/4/5 ✅
+- Tout ce qui dépend de résultats spéculatifs (Backbone concret, choix signaux retenus, comparateurs phase 5.4) reste laissé en `TODO post-phase-X` — Discovery > Reproduction respecté.
 
 Décisions cadres prises (Sprint 1) :
 - **0.1 Stack** : PyTorch 2.6+ + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`.

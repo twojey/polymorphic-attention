@@ -1,0 +1,16 @@
+# Seuils pré-enregistrés phase 2.
+# Spec : DOC/02 §2.8.
+# Règle T.1 : aucune modification post-run.
+
+# --- Tolérance ε sur A (DOC/02 §2.1) ---
+epsilon_target: 0.05                # ε_target on A. Si fit ε_C dépasse, classe rejetée.
+epsilon_aval: 0.10                  # dégradation tâche acceptable
+
+# --- Reproductibilité (variance entre seeds/couches/têtes) ---
+reproducibility_max_var: 0.20       # variance relative IQR/médiane < seuil
+
+# --- Critères go/no-go ---
+sch_corroborated_strong:
+  iqr_to_median_ratio_max: 0.30     # IQR / médiane < 0.30 → corroboration forte
+sch_corroborated_weak:
+  iqr_to_median_ratio_max: 1.00     # IQR comparable médiane → corroboration faible mais existante
