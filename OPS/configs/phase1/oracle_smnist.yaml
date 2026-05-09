@@ -1,0 +1,63 @@
+# Oracle Transformer dense — Sprint 1, domaine Structure-MNIST
+# Spec : DOC/01 §8 (quality gates obligatoires)
+# Pré-enregistré : tous les seuils figés AVANT premier run de référence (T.1)
+
+defaults:
+  - _self_
+  - thresholds_phase1: thresholds_phase1
+  - dataset_split_smnist: dataset_split_smnist
+
+# --- Domaine ---
+domain: smnist
+sprint: 1
+
+# --- Modèle ---
+model:
+  d_model: 256        # sur-paramétrage modéré (DOC/01 §8.2)
+  n_heads: 8
+  n_layers: 6
+  d_ff: 1024
+  dropout: 0.0        # entraînement Oracle = pas de régularisation lourde
+  max_seq_len: 4096   # ≥ Δ_max prévu en sweep (DOC/01 §8.2)
+  n_classes: 10       # prédire le résultat ∈ [0, 10)
+  # vocab_size et pad_id calculés automatiquement à partir du SSG
+
+# --- SSG / dataset ---
+ssg:
+  n_ops: 4            # 4 opérations modulaires (cf. structure_mnist.py _op_table)
+  n_noise: 8          # 8 tokens bruit distincts
+  seed_train: 42
+  seed_val: 43
+  seed_audit_svd: 44
+  n_examples_per_regime: 4096  # par valeur d'axe en sweep monovariate
+  axes:
+    omega:
+      sweep: [0, 1, 2, 4, 6, 8]   # récursion : 0 = pas d'op, 8 = profond
+      reference: 2                  # valeur fixe pour les autres axes
+    delta:
+      sweep: [0, 16, 64, 256, 1024]
+      reference: 16
+    entropy:
+      sweep: [0.0, 0.25, 0.5, 0.75, 1.0]
+      reference: 0.0
+
+# --- Training ---
+training:
+  batch_size: 64
+  lr: 3.0e-4
+  weight_decay: 0.0
+  max_epochs: 200
+  patience: 8
+  plateau_tolerance: 1.0e-3
+  grad_clip: 1.0
+  log_interval_steps: 50
+  precision: bf16-mixed         # DOC/01 §8.4
+
+# --- Extraction (post-training, FP64) ---
+extraction:
+  batch_size: 16
+  fp64_cast: true               # DOC/01 §8.4 — cast au moment de l'extraction
+  use_audit_svd_set: true       # DOC/01 §8.6 — extraction sur audit_svd
+  store_per_layer: true
+  store_per_head: true
+  store_per_example: true

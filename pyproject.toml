@@ -38,17 +38,18 @@ dev = [
   "pre-commit>=3.8",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-# Le projet n'est pas distribué comme package ; éviter l'auto-détection
-packages = []
+# Pas de [build-system] : le projet n'est pas un package Python distribuable
+# pour l'instant. Le code vit dans CODE/ et est importé via PYTHONPATH (cf.
+# OPS/scripts/setup_env.sh). uv gère uniquement les dépendances.
 
 # ============================================================
-# uv : indexes et sources pour wheels CUDA
+# uv : configuration générale + indexes et sources pour wheels CUDA
 # ============================================================
+
+[tool.uv]
+# Empêche uv de traiter ce projet comme un package à build/install.
+# Les dépendances sont seules pertinentes ; le code vit dans CODE/.
+package = false
 # La logique : par défaut torch vient de PyPI (CPU). Si l'extra `cuda` est
 # activé, torch vient de l'index PyTorch CUDA 12.8.
 #
@@ -88,6 +89,7 @@ quote-style = "double"
 testpaths = ["CODE"]
 python_files = ["test_*.py"]
 addopts = "-ra --strict-markers"
+pythonpath = ["CODE"]
 
 # ============================================================
 # Mypy (strict, mais permissif sur libs sans stubs)

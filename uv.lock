@@ -194,7 +194,7 @@ wheels = [
 [[package]]
 name = "asp"
 version = "0.0.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "hydra-core" },
     { name = "lightning" },

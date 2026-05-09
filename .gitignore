@@ -83,3 +83,6 @@ htmlcov/
 # --- Hydra outputs ---
 outputs/
 multirun/
+
+# --- Stage 0.2 — résultats machine ---
+OPS/env/primitives_results.json

@@ -1,0 +1,27 @@
+# Seuils pré-enregistrés phase 1 — Sprint 1, Structure-MNIST
+# Spec : DOC/01 §6 (go/no-go)
+# Règle T.1 : aucune modification post-run.
+
+# --- Métriques ---
+hankel:
+  tau: 1.0e-3       # seuil relatif τ pour rang numérique
+  p_ratio: 0.5      # p = N · p_ratio dans hankelize (split médian)
+
+spectral:
+  eps: 1.0e-12
+
+# --- Critère go/no-go phase 1 (DOC/01 §6) ---
+go_no_go:
+  # GO : il existe une portion ≥ min_portion de l'espace (ω, Δ, ℋ) où
+  #      rang_Hankel < N · max_rank_ratio  OU  H_spectrale < log(N) · max_entropy_ratio
+  #      tout en conservant val_acc ≥ acc_floor.
+  min_portion: 0.10          # 10% des régimes minimum
+  max_rank_ratio: 0.5        # rang ≪ N défini comme < N/2
+  max_entropy_ratio: 0.5     # H ≪ log N défini comme < log(N)/2
+  acc_floor: 0.90            # qualité conservée
+
+# --- Critère plateau de loss validation (DOC/01 §8.3) ---
+plateau:
+  per_regime: true           # vérification par régime, pas seulement en moyenne
+  patience: 8
+  tolerance: 1.0e-3

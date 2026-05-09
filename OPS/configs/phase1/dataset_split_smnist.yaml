@@ -1,0 +1,11 @@
+# Tri-partition train_oracle / audit_svd / init_phase3 — Sprint 1, Structure-MNIST
+# Spec : DOC/01 §8.6 (règle des trois sets disjoints)
+
+train_oracle: 0.70
+audit_svd: 0.20
+init_phase3: 0.10
+
+seed: 7
+# Vérification d'absence de fuite par hashing : à l'intérieur du code,
+# split_indices retourne des index disjoints. Hash des séquences exporté
+# dans le manifest pour audit a posteriori.

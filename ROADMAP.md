@@ -16,11 +16,12 @@ Les phases 4 et 5 répondent à la question secondaire (l'ASP-couche est-elle pr
 
 **Approche recommandée** : sprint-based, minimum viable d'abord (cf. fin de ce document, section "Stratégie de stratification").
 
-**Prochaine action immédiate** : Stage 0.2 — sur le pod RunPod RTX 5090 :
-1. Cloner le repo, exécuter `bash OPS/scripts/setup_env.sh` (test de Stage 0.5 sur la machine cible).
-2. Valider les primitives mathématiques listées dans `OPS/env/STACK.md` § Primitives à valider, documenter les résultats dans `OPS/env/PRIMITIVES.md`.
+**Prochaine action immédiate** : 4 bloquants externes (remote git, MLflow tmux/systemd, clé SSH pod→VPS), puis sur le pod RunPod RTX 5090 :
+1. Cloner le repo, exécuter `bash OPS/scripts/setup_env.sh` (test final de Stage 0.5 sur Blackwell).
+2. Stage 0.2 : `PYTHONPATH=CODE uv run python OPS/scripts/validate_primitives.py`. Coller la sortie dans `OPS/env/PRIMITIVES.md`.
+3. Sprint 1 phase 1 : `PYTHONPATH=CODE uv run python -m phase1_metrologie.run --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist`.
 
-Une fois Stage 0.2 validé : ouverture du Sprint 1 (phase 1 sur Structure-MNIST seul, multi-Oracle reporté à Sprint 4).
+**Pré-prep VPS terminée** : code phase 1 + 1.5 prêt et testé (31 tests passent en CPU), configs Hydra pré-enregistrées, validate_primitives prêt, MLflow server testable.
 
 Décisions cadres prises (Sprint 1) :
 - **0.1 Stack** : PyTorch 2.6+ + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`.
@@ -60,10 +61,11 @@ Tout ce qui doit être fixé **avant** d'écrire la première ligne de code.
 - [x] Choix : **PyTorch 2.6+ + Lightning Fabric + Hydra + uv**
 - [x] Justifié dans `OPS/env/STACK.md` (instrumentation hooks, support Blackwell, custom losses phase 3+)
 
-### 0.2 — Primitives structurées disponibles dans la stack
-- [ ] Vérifier disponibilité dans la stack retenue : convolution causale longue (FFT-based), scan parallèle générique, opérateur de Toeplitz, opérateur de Hankel, SVD batchée
-- [ ] Documenter dans `OPS/env/PRIMITIVES.md`
-- [ ] **Pas de pré-sélection de famille de Backbone** (Mamba, S4, etc.). Le Backbone sera *dérivé* du dictionnaire SCH phase 2, pas importé. Cf. DOC/00 section 4b (principe Discovery > Reproduction).
+### 0.2 — Primitives structurées disponibles dans la stack ✅ partiel
+- [x] Script `OPS/scripts/validate_primitives.py` : 6 checks (svd FP64 batchée, svd_lowrank, fft.rfft, lstsq batché, vmap, attention dense + extraction A FP64)
+- [x] Validation CPU sur VPS : 6/6 passent
+- [ ] **À exécuter sur RTX 5090 pour Stage 0.2 final** — coller le résultat dans `OPS/env/PRIMITIVES.md`
+- [x] **Pas de pré-sélection de famille de Backbone** (Mamba, S4, etc.). Le Backbone sera *dérivé* du dictionnaire SCH phase 2, pas importé. Cf. DOC/00 section 4b (principe Discovery > Reproduction).
 
 ### 0.3 — Hardware cible ✅
 - [x] Topologie : **VPS (édition + lecture résultats) + RunPod RTX 5090 32 GB éphémère (training)**
@@ -97,13 +99,14 @@ Tout ce qui doit être fixé **avant** d'écrire la première ligne de code.
 
 Spec : [DOC/01_phase_metrologie.md](DOC/01_phase_metrologie.md)
 
-### 1.1 — Construction du SSG (Structural Stress Generator)
-- [ ] 🔁 Implémenter axe **ω** (récursion) sur Structure-MNIST
-- [ ] Implémenter axe **Δ** (distance de dépendance)
-- [ ] Implémenter axe **ℋ** (entropie de la tâche)
-- [ ] Vérifier l'isolation : balayage monovarié de chaque axe sans interférence
-- [ ] Implémenter les balayages croisés (ω × Δ, ω × ℋ, Δ × ℋ)
-- [ ] Tests unitaires : structure générée est bien-formée, paramètres reproductibles
+### 1.1 — Construction du SSG (Structural Stress Generator) ✅ V1 token-level
+- [x] Axe **ω** (récursion) — `CODE/phase1_metrologie/ssg/structure_mnist.py`
+- [x] Axe **Δ** (distance de dépendance)
+- [x] Axe **ℋ** (entropie de la tâche)
+- [x] Balayages monovariés via `sweep_monovariate(axis, values, base)`
+- [ ] Balayages croisés (ω × Δ, ω × ℋ, Δ × ℋ) — TODO Sprint 1 sur le pod
+- [x] Tests unitaires : 11 tests SSG (reproductibilité, isolation des axes, tri-partition)
+- ⚠ Limite V1 : token-level (digits=tokens 0-9, pas pixels MNIST). Bascule pixel-level prévue post-Sprint 1 si besoin.
 
 ### 1.2 — Oracle(s) — multi-Oracle (cf. DOC/01 section 7b + 8)
 
@@ -137,11 +140,12 @@ Spec : [DOC/01_phase_metrologie.md](DOC/01_phase_metrologie.md)
 - [ ] Entraînement balayages croisés
 - [ ] Persistence des poids dans `OPS/logs/phase1/oracle/`
 
-### 1.4 — Métriques
-- [ ] Extraction des matrices d'attention par (couche, tête, exemple)
-- [ ] Calcul du rang de Hankel numérique
-- [ ] Calcul de l'entropie spectrale H = -Σ p_k log p_k
-- [ ] Agrégation par régime (ω, Δ, ℋ)
+### 1.4 — Métriques ✅ code prêt
+- [x] Extraction des matrices d'attention par (couche, tête, exemple) FP64 — `CODE/phase1_metrologie/oracle/extract.py`
+- [x] Rang de Hankel numérique — `CODE/phase1_metrologie/metrics/hankel.py`
+- [x] Entropie spectrale H = -Σ p_k log p_k — `CODE/phase1_metrologie/metrics/spectral.py`
+- [x] Tests sur matrices synthétiques (rank-1 outer product → 0, uniforme → log N, exponential signal → Hankel rank 1, etc.)
+- [ ] Agrégation par régime (ω, Δ, ℋ) — TODO post-extraction sur le pod
 
 ### 1.5 — Livrables
 - [ ] Courbes monovariées rang_Hankel(ω), (Δ), (ℋ) + idem pour H_spectrale
@@ -161,32 +165,32 @@ Spec : [DOC/01_phase_metrologie.md](DOC/01_phase_metrologie.md)
 
 Spec : [DOC/01b_phase_calibration_signal.md](DOC/01b_phase_calibration_signal.md)
 
-### 1b.1 — Signaux candidats (3, pas 4)
-- [ ] Implémenter `S_KL` (KL local + baseline empirique global pré-calibré)
-- [ ] Implémenter `S_Grad` (norme du gradient local)
-- [ ] Implémenter `S_Spectral` (r_eff sur fenêtre glissante K via SVD partielle randomisée)
-- [ ] **S_Surprise retiré** : il aurait nécessité un Backbone proxy importé, en violation du principe Discovery > Reproduction (cf. DOC/01b section 1.1)
+### 1b.1 — Signaux candidats (3, pas 4) ✅ code prêt
+- [x] `S_KL` (KL local + baseline empirique global pré-calibré) — `CODE/phase1b_calibration_signal/signals/s_kl.py`
+- [x] `S_Grad` (norme du gradient local) — `CODE/phase1b_calibration_signal/signals/s_grad.py`
+- [x] `S_Spectral` (r_eff sur fenêtre glissante K via SVD partielle randomisée) — `CODE/phase1b_calibration_signal/signals/s_spectral.py`
+- [x] **S_Surprise retiré** : violation Discovery > Reproduction (cf. DOC/01b §1.1)
 
-### 1b.3 — Agrégation
-- [ ] Implémenter Max-Pool par couche sur les têtes
-- [ ] Implémenter Concat sur la deep-stack
-- [ ] Vérifier dimensions : sortie L scalaires par signal par token
+### 1b.3 — Agrégation ✅
+- [x] Max-Pool par couche sur les têtes + Concat deep-stack — `signals/aggregation.py:aggregate_signal_per_token`
+- [x] Tests : `aggregate_signal_per_token((L, B, H, N))` → `(B, L, N)`
 
-### 1b.4 — Banc de test (par Oracle / par domaine si multi-Oracle)
-- [ ] Construire dataset hybride 50% SSG variant + 50% bruit pur (pour le domaine concerné)
-- [ ] Calculer les 3 signaux sur tout le banc
-- [ ] Pré-enregistrer stratégie de sous-échantillonnage tokens
+### 1b.4 — Banc de test (par Oracle / par domaine si multi-Oracle) ✅ code prêt
+- [x] Dataset hybride 50% SSG variant + 50% bruit pur — `bench/hybrid.py`
+- [x] Calcul des 3 signaux : pipeline en place dans le driver run.py
+- [x] Sous-échantillonnage tokens (tous les 8) pré-enregistré dans `signals.yaml`
 
-### 1b.5 — Mesure et critères
-- [ ] Régression Spearman sur (S, ω), (S, Δ), (S, ℋ) avec bootstrap IC95%
-- [ ] Construire matrice de corrélation 3×3 (× N_domaines si multi-Oracle)
-- [ ] Vérifier critères : `max(ρ_ω, ρ_Δ) > 0.70` ET `|ρ_ℋ| < 0.20` par signal
+### 1b.5 — Mesure et critères ✅ code prêt
+- [x] Régression Spearman + bootstrap IC95 — `bench/spearman.py:bootstrap_spearman_ci`
+- [x] Matrice de corrélation 3×3 — `bench/spearman.py:signal_correlations`
+- [x] Critères 0.70 / 0.20 — `bench/spearman.py:passes_phase1b_criteria`
+- [x] Tests : faux signaux corrélés → passent, bruit pur → ne passent pas
 
-### 1b.6 — Phase 1.5b — Distillabilité
-- [ ] 🔁 Si S_Spectral retenu : entraîner MLP léger student
-- [ ] Mesurer ρ Spearman et MSE student/teacher
-- [ ] Critère : ρ > 0.85
-- [ ] Si échec : choisir fallback (S_Spectral en direct ou simplification Backbone)
+### 1b.6 — Phase 1.5b — Distillabilité ✅ code prêt
+- [x] StudentMLP + entraînement — `bench/distillability.py:train_student`
+- [x] Mesure ρ Spearman + MSE relative
+- [x] Critère ρ > 0.85 + MSE_relative < 0.5 (pré-enregistrés dans thresholds_phase1b.yaml)
+- [ ] Fallback à choisir si échec (cf. DOC/01b §5)
 
 ### 1b.7 — Livrables
 - [ ] Matrice de corrélation finale

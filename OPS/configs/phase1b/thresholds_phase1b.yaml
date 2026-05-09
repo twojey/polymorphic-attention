@@ -1,0 +1,27 @@
+# Seuils pré-enregistrés phase 1.5 — Sprint 1
+# Spec : DOC/01b §4 (sensibilité 0.70, immunité 0.20), §5 (distillabilité 0.85)
+# Règle T.1 : aucune modification post-run.
+
+# --- Critères de sélection (DOC/01b §4) ---
+selection:
+  threshold_structural: 0.70   # max(|ρ_ω|, |ρ_Δ|) > 0.70
+  threshold_noise: 0.20        # |ρ_ℋ| < 0.20
+  multi_signal_allowed: true   # un signal peut couvrir un seul axe
+
+# --- Distillabilité (DOC/01b §5) ---
+distillability:
+  rho_threshold: 0.85
+  mse_relative_threshold: 0.5  # MSE / Var(teacher)
+  student:
+    hidden: 128
+    epochs: 20
+    batch_size: 256
+    lr: 1.0e-3
+    dropout: 0.1
+
+# --- Go/no-go phase 1.5 (DOC/01b §7) ---
+go_no_go:
+  # GO : au moins un signal passe les deux conditions sur au moins un axe.
+  # Si S_Spectral retenu : Distillabilité validée OU fallback documenté.
+  require_at_least_one_signal: true
+  if_s_spectral_retained_require_distillability: true
