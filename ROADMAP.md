@@ -2,7 +2,7 @@
 
 ## Contexte de reprise (lire en premier)
 
-**État courant** : spec **V3.5 complète et purifiée**. 19 fichiers, ~2090 lignes, 0 lien cassé. Aucun code. Stack non fixée.
+**État courant (mai 2026)** : spec V3.5 complète + **pré-prep VPS maximale terminée**. 6 commits sur `master`. **108 tests CPU passent** (3.5s). Stack arrêtée. Aucun run sur GPU encore — tout attend l'accès au pod RunPod RTX 5090.
 
 **Question scientifique cadrée** : *« peut-on, avec les outils mathématiques actuels, synthétiser une attention linéaire ou superlinéaire sans trade-off majeur à partir d'oracles quadratiques ? »* — réponse OUI ou NON, les deux acceptables.
 
@@ -33,11 +33,11 @@ Les phases 4 et 5 répondent à la question secondaire (l'ASP-couche est-elle pr
 - Tout ce qui dépend de résultats spéculatifs (Backbone concret, choix signaux retenus, comparateurs phase 5.4) reste laissé en `TODO post-phase-X` — Discovery > Reproduction respecté.
 
 Décisions cadres prises (Sprint 1) :
-- **0.1 Stack** : PyTorch 2.6+ + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`.
-- **0.3 Hardware** : VPS (édition / lecture résultats) + RunPod RTX 5090 32 GB éphémère (training). Détails dans `OPS/env/HARDWARE.md`.
-- **0.4 Logging** : MLflow self-hosted sur le VPS (zéro compte externe, aucune donnée ne sort des machines), manifests YAML locaux pour traçabilité offline. Détails dans `OPS/env/LOGGING.md`.
+- **0.1 Stack** : PyTorch ≥ 2.11.0+cu128 (seul build sm_120 Blackwell) + Lightning Fabric + Hydra + uv. Détails et justifications dans `OPS/env/STACK.md`. Aligné avec stack Lumis validée sur 5090 (`/root/lumis/OPS`).
+- **0.3 Hardware** : VPS (édition / serveur MLflow / lecture résultats) + RunPod RTX 5090 32 GB éphémère (training). Image Docker `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-devel`, Cloud type COMMUNITY, volume 100 GB. Détails dans `OPS/env/HARDWARE.md`.
+- **0.4 Logging** : MLflow self-hosted sur le VPS (zéro compte externe, aucune donnée ne sort des machines), accès pod via tunnel SSH `ssh -L 5000:127.0.0.1:5000`. Manifests YAML locaux pour traçabilité offline. Détails dans `OPS/env/LOGGING.md`.
 
-0.2 (famille Backbone) a été retirée — le Backbone est dérivé en phase 3, pas pré-sélectionné. Le 0.2 actuel concerne la disponibilité des primitives mathématiques.
+0.2 (famille Backbone) a été retirée — le Backbone est dérivé en phase 3, pas pré-sélectionné. Le 0.2 actuel concerne la disponibilité des primitives mathématiques (`OPS/scripts/validate_primitives.py` prêt, 6 checks CPU passent, à ré-exécuter sur 5090).
 
 **Documents canoniques** :
 - `DOC/00_vision.md` — thèse, scope, principe Discovery > Reproduction, Oracle borne sup
@@ -49,6 +49,18 @@ Décisions cadres prises (Sprint 1) :
 - `DOC/05_phase_pareto.md` — 5 tests phase 5 + R_max/2 (6c) + différentiel (5a.ii) + comparateurs domain-aware
 - `DOC/falsifiabilite.md` — 13 règles d'application, hiérarchie des risques
 - `DOC/glossaire.md` — terminologie V3.5 canonique
+- `DOC/reports/{phase1,phase1b,phase2,phase3,phase4,phase5}_template.md` — squelettes rapports
+
+**Drivers Hydra prêts** :
+- `phase1_metrologie.run` — Oracle SMNIST + extraction + métriques (Sprint 1)
+- `phase1b_calibration_signal.run` — 3 signaux + Spearman + verdict gate (Sprint 1)
+- `phase1b_calibration_signal.run_distillability` — sub-phase 1.5b (Sprint 1)
+- `phase2_audit_spectral.run` — SVD + SRM + transfer law + batteries (Sprint 2)
+
+**Drivers à écrire post-pod** (dépendent de résultats spéculatifs) :
+- `phase3_kernel_asp.run` — après que phase 2 ait dicté la classe SCH dominante
+- `phase4_routage_budget.run` — après que phase 1.5 ait dicté les signaux retenus
+- `phase5_pareto.run` — après que phase 3 ait produit l'ASPLayer concrète (les fonctions de test sont déjà testées et prêtes à être branchées)
 
 
 ## Légende
