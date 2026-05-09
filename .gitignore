@@ -1,0 +1,84 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- Virtual environments ---
+# Anchored à la racine pour ne pas attraper OPS/env/
+/.venv/
+/venv/
+/env/
+.python-version
+
+# --- uv (le lockfile uv.lock EST commité ; ceci attrape le cache) ---
+.uv/
+.uv-cache/
+
+# --- Variables d'environnement et secrets ---
+.env
+.env.*
+*.key
+*.pem
+secrets/
+
+# --- IDE / éditeurs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# --- Claude Code (settings locaux par machine) ---
+.claude/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Logging d'expériences ---
+wandb/
+mlruns/
+runs/
+tensorboard/
+lightning_logs/
+
+# --- Poids et checkpoints ---
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+**/checkpoints/
+
+# --- Datasets (cache et brut) ---
+data/
+datasets/
+
+# --- OPS/logs : tout gitignored sauf le suivi humain ---
+OPS/logs/*
+!OPS/logs/compute_budget.md
+!OPS/logs/runs_index.csv
+!OPS/logs/manifests/.gitkeep
+
+# --- Tests / coverage ---
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.tox/
+
+# --- Profiling ---
+*.prof
+
+# --- Hydra outputs ---
+outputs/
+multirun/
