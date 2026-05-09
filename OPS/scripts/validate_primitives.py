@@ -128,6 +128,8 @@ def check_dense_attention_export(device: torch.device) -> dict[str, Any]:
 
 
 def system_info() -> dict[str, Any]:
+    import os
+
     info: dict[str, Any] = {
         "python": platform.python_version(),
         "torch": torch.__version__,
@@ -139,6 +141,18 @@ def system_info() -> dict[str, Any]:
         info["device_name"] = torch.cuda.get_device_name(0)
         info["device_capability"] = torch.cuda.get_device_capability(0)
         info["device_vram_gb"] = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        # Détection Blackwell (sm_120 = capability 12.0)
+        info["is_blackwell"] = info["device_capability"] == (12, 0)
+
+    # ENV vars Blackwell — issues du retour Lumis sur RTX 5090
+    expected_env = {
+        "TORCH_CUDA_ARCH_LIST": "12.0",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "CUDA_MODULE_LOADING": "LAZY",
+        "MAX_JOBS": "4",
+    }
+    info["env_vars"] = {k: os.environ.get(k) for k in expected_env}
+    info["env_vars_missing"] = [k for k, v in expected_env.items() if os.environ.get(k) != v]
     return info
 
 
@@ -151,6 +165,17 @@ def main() -> int:
     for k, v in sys.items():
         print(f"- **{k}** : `{v}`")
     print()
+
+    if sys.get("env_vars_missing"):
+        print(
+            f"⚠ ENV vars Blackwell manquantes ou incorrectes : {sys['env_vars_missing']}.\n"
+            f"   Lance `bash OPS/scripts/setup_env.sh` AVANT ce script pour les set.\n"
+        )
+    if sys.get("cuda_available") and not sys.get("is_blackwell"):
+        print(
+            f"⚠ Compute capability {sys.get('device_capability')} ≠ (12, 0). "
+            f"Ce n'est pas une 5090 — ASP cible Blackwell pour validation finale.\n"
+        )
 
     checks = [
         ("svd_fp64_batched", check_svd_fp64_batched),

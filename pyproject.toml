@@ -27,8 +27,12 @@ dependencies = [
 [project.optional-dependencies]
 # `uv sync --extra cpu` sur VPS sans GPU (torch CPU depuis PyPI)
 # `uv sync --extra cuda` sur pod RunPod RTX 5090 (torch CUDA 12.8)
-cpu = ["torch>=2.6.0"]
-cuda = ["torch>=2.6.0"]
+#
+# torch >= 2.11 nécessaire : seul build officiel supportant Blackwell sm_120
+# (RTX 5090). Les builds 2.6–2.10 n'incluent pas les wheels cu128/sm_120.
+# Confirmé par les scripts validés du projet Lumis (cf. /root/lumis/OPS).
+cpu = ["torch>=2.11.0"]
+cuda = ["torch>=2.11.0"]
 
 dev = [
   "pytest>=8.0",

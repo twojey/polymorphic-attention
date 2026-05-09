@@ -16,10 +16,73 @@ Aucun training sur le VPS. Aucune édition long-terme sur le pod.
 | Paramètre | Valeur |
 |---|---|
 | GPU | NVIDIA GeForce RTX 5090 (Blackwell, sm_120) |
+| Compute capability | (12, 0) — confirmé par tests Lumis sur pod réel |
 | VRAM | 32 GB |
 | Précision native | FP64, FP32, TF32, BF16, FP16, FP8 |
-| CUDA | 12.8 (minimum, vérifier `nvidia-smi`) |
+| CUDA | 12.8 |
 | Driver | ≥ 555 |
+| PyTorch | **≥ 2.11.0+cu128** (seul build officiel sm_120) |
+
+## Image Docker recommandée pour le pod
+
+**`pytorch/pytorch:2.7.0-cuda12.8-cudnn9-devel`** (validée par les scripts Lumis sur 5090).
+
+Cette image fournit Python + CUDA toolkit 12.8 system-wide. `setup_env.sh`
+y crée un `.venv` avec `uv sync --extra cuda --extra dev` qui installe
+torch 2.11.0+cu128 dans le venv (override la version system).
+
+Alternative de fallback si l'image ci-dessus est indisponible :
+`runpod/pytorch:2.2.1-py3.10-cuda12.1.1-devel-ubuntu22.04` — mais elle ne
+supporte PAS Blackwell directement, il faut quand même réinstaller torch
+via `setup_env.sh`.
+
+## Configuration RunPod (création du pod)
+
+| Paramètre | Valeur |
+|---|---|
+| GPU type | `NVIDIA GeForce RTX 5090` |
+| Cloud type | **`COMMUNITY`** (la 5090 est plus disponible en COMMUNITY que SECURE) |
+| Container image | `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-devel` |
+| Container disk | 40 GB |
+| Volume | 100 GB |
+| Ports exposés | `22/tcp` (SSH) |
+
+## Variables d'environnement Blackwell
+
+Toutes set automatiquement par `OPS/scripts/setup_env.sh`. Pour info :
+
+```bash
+export TORCH_CUDA_ARCH_LIST="12.0"             # cible compute capability sm_120
+export CUDA_HOME=/usr/local/cuda
+export FORCE_CUDA=1
+export MAX_JOBS=4                               # anti-freeze sur compilation parallèle
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export CUDA_MODULE_LOADING=LAZY
+export CUDA_DEVICE_MAX_CONNECTIONS=1
+export NCCL_P2P_DISABLE=1                       # bénin single-GPU
+export TOKENIZERS_PARALLELISM=false
+```
+
+## Pièges connus 5090 (issus des scripts Lumis validés)
+
+| Symptôme | Cause | Mitigation |
+|---|---|---|
+| Erreur kernel CUDA non supporté | torch < 2.11 ou index ≠ cu128 | `setup_env.sh` pinne `torch>=2.11.0` + index `cu128` |
+| Compilation freeze | parallélisme excessif | `MAX_JOBS=4` set par `setup_env.sh` |
+| OOM intermittent | fragmentation VRAM | `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` set |
+| Latence init CUDA élevée | chargement eager des modules | `CUDA_MODULE_LOADING=LAZY` set |
+| `nvidia-smi` reporte un GPU différent au reboot | RunPod réassigne le pod | `setup_env.sh` log le GPU réel ; abandonner et relancer si mismatch |
+
+## ASP n'a PAS besoin de
+
+Pour mémoire — si on regarde la stack Lumis qui a beaucoup plus de deps :
+
+- `xformers`, `bitsandbytes`, `unsloth`, `transformers` HF, `peft`, `trl` :
+  toute la stack LLM finetuning. Pas notre cas. On a notre propre Transformer
+  dense (cf. `CODE/phase1_metrologie/oracle/transformer.py`).
+- Quantization : pas pour Sprint 1. Phase 5.3 (HT) uniquement si nécessaire.
+- Flash Attention : équivalent mathématique à attention dense, autorisé à
+  l'entraînement Oracle, désactivé à l'extraction (DOC/01 §8.1, §8.4).
 
 ## Implications protocole
 

@@ -19,6 +19,22 @@ cd "$REPO_ROOT"
 echo "==> Repo root : $REPO_ROOT"
 
 # ----------------------------------------------------------------
+# 0. Variables d'environnement Blackwell (sm_120, RTX 5090)
+# ----------------------------------------------------------------
+# Configuration validée par les scripts Lumis (/root/lumis/OPS).
+# Ces variables doivent être set AVANT toute compilation/install qui pourrait
+# tenter de produire un kernel CUDA — sinon l'arch n'est pas ciblée.
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
+export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+export FORCE_CUDA="${FORCE_CUDA:-1}"
+export MAX_JOBS="${MAX_JOBS:-4}"                                 # anti-freeze sur compilation parallèle
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export CUDA_MODULE_LOADING="${CUDA_MODULE_LOADING:-LAZY}"
+export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
+export NCCL_P2P_DISABLE="${NCCL_P2P_DISABLE:-1}"                 # bénin en single-GPU, sain
+export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+
+# ----------------------------------------------------------------
 # 1. Détection GPU
 # ----------------------------------------------------------------
 if [[ -z "${ASP_CUDA:-}" ]]; then
