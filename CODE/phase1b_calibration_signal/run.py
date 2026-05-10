@@ -55,14 +55,58 @@ from shared.runner import finalize_manifest, make_manifest, write_manifest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _load_oracle(checkpoint_path: str, vocab: Vocab) -> OracleTransformer:
-    """Charge l'Oracle. Le checkpoint contient le state_dict + cfg sérialisée."""
+def _make_padded_collate(pad_id: int):
+    """Retourne un collate_fn fixé sur le pad_id du Vocab."""
+    from functools import partial
+    return partial(collate, pad_id=pad_id)
+
+
+def _load_oracle(
+    checkpoint_path: str,
+    vocab: Vocab,
+    *,
+    d_model: int,
+    n_heads: int,
+    n_layers: int,
+    d_ff: int,
+    dropout: float,
+    max_seq_len: int,
+    n_classes: int,
+    device: str = "cuda",
+) -> OracleTransformer:
+    """Charge l'Oracle depuis un checkpoint Fabric (state_dict + meta).
+
+    Le checkpoint a la forme {"model": state_dict, "epoch": int, "best_val_loss": float}
+    (cf. phase1_metrologie.oracle.train.train_oracle). Les hyperparamètres
+    du modèle ne sont pas dans le checkpoint — ils sont fournis via la config
+    Hydra et doivent correspondre EXACTEMENT à ceux utilisés à l'entraînement
+    sinon load_state_dict échoue.
+    """
     state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    # Reconstitue OracleConfig depuis le state ; en V1 on suppose le caller
-    # passe les bons hyperparamètres via config Hydra.
-    raise NotImplementedError(
-        "TODO sur le pod : charger l'Oracle via MLflow artifact ou state_dict checkpoint."
+    state_dict = state["model"] if isinstance(state, dict) and "model" in state else state
+
+    cfg = OracleConfig(
+        vocab_size=vocab.size,
+        d_model=d_model, n_heads=n_heads, n_layers=n_layers, d_ff=d_ff,
+        dropout=dropout, max_seq_len=max_seq_len, n_classes=n_classes,
+        pad_id=vocab.PAD,
     )
+    model = OracleTransformer(cfg)
+    # state_dict peut avoir des préfixes : "_forward_module." (Fabric) et/ou
+    # "_orig_mod." (torch.compile). On strip les deux si présents.
+    cleaned = {}
+    for k, v in state_dict.items():
+        new_k = k.removeprefix("_forward_module.").removeprefix("_orig_mod.")
+        cleaned[new_k] = v
+    missing, unexpected = model.load_state_dict(cleaned, strict=False)
+    if missing or unexpected:
+        print(f"AVERT load_state_dict : missing={len(missing)} keys, unexpected={len(unexpected)} keys")
+        if missing[:3]:
+            print(f"  premiers missing : {missing[:3]}")
+        if unexpected[:3]:
+            print(f"  premiers unexpected : {unexpected[:3]}")
+    model = model.to(device)
+    return model
 
 
 def _calibrate_kl_baseline(
@@ -74,7 +118,7 @@ def _calibrate_kl_baseline(
         n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
     )
     ds = StructureMNISTDataset(cfg)
-    loader = DataLoader(ds, batch_size=batch_size, collate_fn=collate)
+    loader = DataLoader(ds, batch_size=batch_size, collate_fn=_make_padded_collate(vocab.PAD))
 
     extractor = AttentionExtractor(oracle)
     accumulators: list[torch.Tensor] | None = None  # par couche
@@ -104,10 +148,17 @@ def _compute_signals_on_bench(
     vocab: Vocab,
     s_spectral_K: int,
     s_spectral_tau: float,
-    baseline: GlobalKLBaseline,
+    baseline: GlobalKLBaseline | None,
+    enable_s_kl: bool = True,
+    enable_s_spectral: bool = True,
 ) -> dict[str, np.ndarray]:
-    """Pour chaque token du banc, calcule (S_KL, S_Spectral) agrégés (B, L, N)
-    puis aplatit en vecteur 1D + collecte stress (omega, delta, entropy)."""
+    """Pour chaque token du banc, calcule les signaux activés agrégés (B, L, N)
+    puis aplatit en vecteur 1D + collecte stress (omega, delta, entropy).
+
+    NB V1 : S_KL nécessite que la calibration baseline et le bench utilisent
+    le même seq_len, sinon les distributions ne broadcast pas. Si seq_len
+    variable dans le bench, désactiver S_KL via `enable_s_kl=False`.
+    """
     extractor = AttentionExtractor(oracle)
     s_kl_all: list[np.ndarray] = []
     s_spectral_all: list[np.ndarray] = []
@@ -121,32 +172,43 @@ def _compute_signals_on_bench(
         dump = extractor.extract(
             tokens, qpos, batch["targets"], batch["omegas"], batch["deltas"], batch["entropies"]
         )
-        skl = compute_s_kl(dump.attn, baseline)         # (L, B, H, N)
-        sspec = compute_s_spectral(dump.attn, K=s_spectral_K, tau=s_spectral_tau)
-        skl_agg = aggregate_signal_per_token(skl)       # (B, L, N)
-        sspec_agg = aggregate_signal_per_token(sspec)
-        # Pour Spearman : flatten (B, L, N) -> (B*L*N,) avec stress par token
-        B, L, N = skl_agg.shape
-        # On utilise le max sur L pour réduire à 1 valeur par token
-        skl_flat = skl_agg.max(dim=1).values.cpu().numpy().reshape(-1)
-        sspec_flat = sspec_agg.max(dim=1).values.cpu().numpy().reshape(-1)
-        # Stress : broadcast par token (chaque token de l'exemple b a le même stress)
+        skl_flat = None
+        if enable_s_kl and baseline is not None:
+            skl = compute_s_kl(dump.attn, baseline)         # (L, B, H, N)
+            skl_agg = aggregate_signal_per_token(skl)       # (B, L, N)
+            B, L, N_skl = skl_agg.shape
+            skl_flat = skl_agg.max(dim=1).values.cpu().numpy().reshape(-1)
+
+        sspec_flat = None
+        if enable_s_spectral:
+            sspec = compute_s_spectral(dump.attn, K=s_spectral_K, tau=s_spectral_tau)
+            sspec_agg = aggregate_signal_per_token(sspec)
+            B, L, N = sspec_agg.shape
+            sspec_flat = sspec_agg.max(dim=1).values.cpu().numpy().reshape(-1)
+        else:
+            B, _, _, N = dump.attn[0].shape
+
         omega_token = batch["omegas"].cpu().numpy()[:, None].repeat(N, axis=1).reshape(-1)
         delta_token = batch["deltas"].cpu().numpy()[:, None].repeat(N, axis=1).reshape(-1)
         entropy_token = batch["entropies"].cpu().numpy()[:, None].repeat(N, axis=1).reshape(-1)
-        s_kl_all.append(skl_flat)
-        s_spectral_all.append(sspec_flat)
+        if skl_flat is not None:
+            s_kl_all.append(skl_flat)
+        if sspec_flat is not None:
+            s_spectral_all.append(sspec_flat)
         omega_all.append(omega_token)
         delta_all.append(delta_token)
         entropy_all.append(entropy_token)
 
-    return {
-        "S_KL": np.concatenate(s_kl_all),
-        "S_Spectral": np.concatenate(s_spectral_all),
+    out: dict[str, np.ndarray] = {
         "omega": np.concatenate(omega_all),
         "delta": np.concatenate(delta_all),
         "entropy": np.concatenate(entropy_all),
     }
+    if s_kl_all:
+        out["S_KL"] = np.concatenate(s_kl_all)
+    if s_spectral_all:
+        out["S_Spectral"] = np.concatenate(s_spectral_all)
+    return out
 
 
 def _subsample(arr: np.ndarray, every_k: int, seed: int) -> np.ndarray:
@@ -192,15 +254,34 @@ def main(cfg: DictConfig) -> None:
                 "Oracle checkpoint requis. Override Hydra : "
                 "`oracle_checkpoint=path/to/ckpt.pt`"
             )
-        oracle = _load_oracle(str(oracle_checkpoint), vocab)
-        oracle.eval()
-
-        # --- Calibration baseline ---
-        baseline = _calibrate_kl_baseline(
-            oracle, vocab,
-            n_examples=cfg.s_kl.baseline.n_calibration_examples,
-            seed=cfg.s_kl.baseline.seed,
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        oracle = _load_oracle(
+            str(oracle_checkpoint), vocab,
+            d_model=cfg.model.d_model, n_heads=cfg.model.n_heads,
+            n_layers=cfg.model.n_layers, d_ff=cfg.model.d_ff,
+            dropout=cfg.model.dropout, max_seq_len=cfg.model.max_seq_len,
+            n_classes=cfg.model.n_classes, device=device,
         )
+        oracle.eval()
+        print(f"Oracle chargé depuis {oracle_checkpoint} sur device {device}", flush=True)
+
+        # --- Calibration baseline (uniquement si S_KL activé) ---
+        # NB V1 : S_KL nécessite que la calibration et le bench utilisent le
+        # même seq_len, sinon les distributions ne broadcast pas. Pour V1
+        # avec bench à seq_len variable, on désactive S_KL par défaut.
+        # Activable via override : s_kl.enabled=true (et fixer bench.seq_len).
+        enable_s_kl = bool(OmegaConf.select(cfg, "s_kl.enabled", default=False))
+        enable_s_spectral = bool(OmegaConf.select(cfg, "s_spectral.enabled", default=True))
+        baseline = None
+        if enable_s_kl:
+            baseline = _calibrate_kl_baseline(
+                oracle, vocab,
+                n_examples=cfg.s_kl.baseline.n_calibration_examples,
+                seed=cfg.s_kl.baseline.seed,
+            )
+            print(f"Baseline KL calibrée sur {cfg.s_kl.baseline.n_calibration_examples} exemples", flush=True)
+        else:
+            print("S_KL désactivé pour ce run (seq_len variable). Seul S_Spectral sera évalué.", flush=True)
 
         # --- Banc hybride ---
         bench_cfg = HybridBenchConfig(
@@ -213,20 +294,24 @@ def main(cfg: DictConfig) -> None:
             noise_entropies=tuple(cfg.bench.noise_entropies),
         )
         bench_ds = build_hybrid_bench(bench_cfg)
-        bench_loader = DataLoader(bench_ds, batch_size=8, collate_fn=collate)
+        # batch_size petit car capture_attn=True matérialise A en N² × layers × heads
+        # peak mémoire ≈ batch × 6 × 8 × N² × 4 bytes ; pour N=4100, batch=2 → ~6.5 GB ok
+        bench_batch = OmegaConf.select(cfg, "bench.batch_size", default=2)
+        bench_loader = DataLoader(bench_ds, batch_size=bench_batch, collate_fn=_make_padded_collate(vocab.PAD))
 
         # --- Signaux + Spearman ---
         results = _compute_signals_on_bench(
             oracle=oracle, bench_loader=bench_loader, vocab=vocab,
             s_spectral_K=cfg.s_spectral.K, s_spectral_tau=cfg.s_spectral.tau,
             baseline=baseline,
+            enable_s_kl=enable_s_kl, enable_s_spectral=enable_s_spectral,
         )
         every_k = cfg.subsample.every_k_tokens
         seed = cfg.subsample.seed
-        signals = {
-            "S_KL": _subsample(results["S_KL"], every_k, seed),
-            "S_Spectral": _subsample(results["S_Spectral"], every_k, seed),
-        }
+        signals = {}
+        for sname in ("S_KL", "S_Spectral"):
+            if sname in results:
+                signals[sname] = _subsample(results[sname], every_k, seed)
         stress = {
             "omega": _subsample(results["omega"], every_k, seed),
             "delta": _subsample(results["delta"], every_k, seed),

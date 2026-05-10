@@ -3,18 +3,40 @@
 
 defaults:
   - _self_
-  - thresholds_phase1b: thresholds_phase1b
+  - thresholds_phase1b@thresholds_phase1b
 
 domain: smnist
 sprint: 1
 
+# --- Oracle phase 1 ---
+# Hyperparamètres du modèle, doivent correspondre EXACTEMENT à ceux du
+# checkpoint chargé (sinon load_state_dict erreur). Aligné sur
+# OPS/configs/phase1/oracle_smnist.yaml (commit fc834a6).
+oracle_checkpoint: null   # override CLI requis : oracle_checkpoint=path/to/ckpt
+model:
+  d_model: 256
+  n_heads: 8
+  n_layers: 6
+  d_ff: 1024
+  dropout: 0.0
+  max_seq_len: 8192
+  n_classes: 10
+  # vocab_size et pad_id calculés depuis Vocab(n_ops=4, n_noise=8)
+
 # --- Banc hybride (DOC/01b §2.1) ---
+# NB V1 : structured_omegas et structured_deltas réduits par rapport à la
+# spec d'origine ([2..12] × [64..4096]) pour rester dans la distribution
+# d'entraînement de l'Oracle phase 1 (training mono-axe ω∈[0..8] avec
+# Δ_ref=16, ou Δ∈[0..1024] avec ω_ref=2). La cross-product max_omega ×
+# max_delta produit seq_len = 3 + 2ω(Δ+1) qu'il faut garder ≤ max_seq_len
+# du modèle (8192). Sprint 4 : étendre quand le modèle entraîne sur un
+# sweep cross-axe.
 bench:
   n_examples: 2000
   seed: 100
   seq_len: null   # null = chaque sample garde sa longueur naturelle
-  structured_omegas: [2, 4, 6, 8, 10, 12]
-  structured_deltas: [64, 256, 1024, 4096]
+  structured_omegas: [2, 4, 6, 8]      # max ω du training mono-axe
+  structured_deltas: [16, 64, 256]     # cross ω=8 × Δ=256 → seq=4115 < 8192
   structured_entropy_max: 0.2
   noise_entropies: [0.0, 0.25, 0.5, 0.75, 1.0]
 
