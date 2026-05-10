@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | à tester post-phase 1 |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **borderline** (n=500 : ρ_Δ=0.6973, IC[0.693,0.701] ∋ 0.70). 2000-ex en cours pour verdict |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -39,6 +39,31 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-10 — Re-run phase 1.5 à n_examples=2000 après NO-GO borderline 500
+**#decision** Run 500 ex donne ρ_Δ=0.6973 IC[0.693,0.701] qui contient le seuil 0.70 → indistinguable. Spec DOC/01b recommande 2000. Re-run à la valeur spec, pas modification post-hoc des seuils. Si toujours NO-GO à 2000 → respect du verdict pré-enregistré, arrêt protocole / sortie anticipée n°1.
+**Why** : honoring pré-enregistrement T.1 strict. 500-ex était une simplification time-saving ; 2000-ex est la valeur originale.
+**How to apply** : n_examples=2000, autres params identiques. Aucune modification de seuils ni de critères.
+
+### 2026-05-10 — Switch eigvalsh(WW.T + εI) au lieu de svdvals(W) dans compute_s_spectral
+**#decision** Sur attention rank-deficient (concentration tokens), cuSolver SVD fail à converger → fallback iterative très lent (10× ralentissement) ou erreur. Eigvalsh sur PSD est garanti convergent ; ridge ε=1e-6 évite les eigenvalues répétées. σ_i² = λ_i de W W.T.
+**Why** : performance + stabilité numérique. Smoke originel à 13+ min avec SVD direct ; eigvalsh + ridge passe en 9 min.
+**How to apply** : voir CODE/phase1b_calibration_signal/signals/s_spectral.py commit 33b7362.
+
+### 2026-05-10 — FP32 SVD au lieu de FP64 dans compute_s_spectral
+**#decision** RTX 5090 consumer a FP64 nerfé à ~1/64 du FP32 (consumer cards). Pour un compteur r_eff au-dessus de tau·σ_max, FP32 est largement suffisant. Speedup 50-100×.
+**Why** : on passe en FP32 uniquement pour la SVD ; les matrices A restent FP64 en amont. Aucune perte sur le résultat r_eff.
+**How to apply** : `windows_flat.float()` avant SVD/eigvalsh.
+
+### 2026-05-10 — Vectorisation compute_s_spectral
+**#decision** V1 du code avait 4 boucles Python imbriquées (L, B, H, N) avec SVD à chaque iter. Refactor en SVD batchée GPU per-layer.
+**Why** : pour 32 ex × 6 layers × 8 heads × 4000 tokens = 6M SVDs séquentielles sur CPU, runtime des heures. Batchée GPU = secondes.
+**How to apply** : stack windows en (B*H*n_full, K, K), batched SVD/eigvalsh, reshape back.
+
+### 2026-05-10 — Phase 1.5 V1 driver : S_KL désactivable
+**#decision** Le baseline KL est calibré sur seq_len fixe (ω=0,Δ=0 → seq=3) mais le bench a seq_len variable → mismatch shape, broadcast impossible. V1 désactive S_KL par défaut, seul S_Spectral est évalué.
+**Why** : design initial assumait seq_len fixe pour le baseline. À fixer en V2 (calibrer baseline à seq_len matching bench, ou utiliser distribution marginale). Pour V1 verdict : suffisant d'avoir 1 signal valide (≥1 signal selon spec).
+**How to apply** : `s_kl.enabled=false` (default V1). Activable si bench passe à `seq_len: <fixe>`.
 
 ### 2026-05-10 — `extraction.batch_size=4` au lieu de 16
 **#decision** Avec `max_seq_len=8192` et capture_attn=True, peak mémoire = 6 layers × 16 batch × 8 heads × N² × 2 bytes = **38 GB → OOM** sur 32 GB. Override CLI à 4 jusqu'à refactor extract.py per-layer.
@@ -69,6 +94,22 @@ Idem ci-dessus, redondant — à fusionner après le run.
 
 ## Surprises et pièges (chronologique inverse)
 
+### 2026-05-10 — Phase 1.5 NO-GO borderline (ρ_Δ = 0.6973 vs seuil 0.70)
+**#surprise** Le full run sur 500 exemples donne ρ_S_Spectral_Δ = 0.6973 avec IC95 [0.6934, 0.7012] — le seuil pré-enregistré 0.70 est *à l'intérieur* de l'IC. Statistiquement on ne peut pas distinguer si le vrai ρ est > ou < 0.70. ρ_ω=0.60 reste sous le seuil.
+**Lecture** :
+- Le signal **discrimine bien structure vs bruit** (ρ_ℋ = -0.18, sous le seuil 0.20 ✅)
+- Mais ne corrèle qu'à la limite avec le stress structurel
+- Soit le signal est faiblement informatif (artefact V1 driver), soit la SCH est moins simple que postulée
+**Leçons** : (1) pré-enregistrer des seuils sans pilote est risqué — le seuil 0.70 est arbitraire ; (2) IC bootstrap fournit une vraie info au-delà du verdict binaire ; (3) il faut tester le full 2000 avant verdict définitif.
+
+### 2026-05-10 — cuSolver SVD fail sur attention rank-deficient
+**#bug** Sur les fenêtres K×K extraites de A (attention concentrée), cuSolver SVD fail à converger sur ~60% des batches → fallback iterative algorithm très lent. Même eigvalsh sur W W.T fail si on n'ajoute pas de ridge (eigenvalues répétées). Fix : ridge ε·I avant eigvalsh, soustrait après.
+**Leçon** : ne jamais assumer SVD/eigh GPU convergent silencieusement sur matrices low-rank. Toujours ridge si on ne contrôle pas la condition.
+
+### 2026-05-10 — FP64 SVD ~64× plus lent sur RTX 5090 consumer
+**#surprise** Découvert empiriquement après que la première vectorisation avait des perf décevantes. Les cartes consumer NVIDIA (50, 40, 30 series) ont le FP64 nerfé à ~1/64 du FP32 (vs 1/2 sur les datacenter A100/H100). Sur RTX 5090, FP64 SVD = ~1.5 TFLOPS seulement. Cast FP32 systématique pour SVD/eigh sauf besoin numérique strict.
+**Leçon** : le choix FP64 pour l'extraction A en phase 1 reste valide (numérique de l'extraction). Mais pour les SVD downstream sur les windows, FP32 suffit largement.
+
 ### 2026-05-10 — Buffering stdout en file redirect
 **#surprise** Avec `nohup ... > log 2>&1 &`, les `print()` Python sont block-buffered → log vide pendant des minutes. **Fix** : `python -u` ou `PYTHONUNBUFFERED=1`. Ajouté au launch command. À retenir pour tous les futurs nohup.
 
@@ -98,7 +139,40 @@ defaults:
 
 ## Avancement chronologique
 
-### 2026-05-10 lundi (après-midi) — Sprint 1 démarrage
+### 2026-05-10 lundi (soirée)
+
+#### 18:51 Paris — **Phase 1.5 (500 ex) terminée — NO-GO borderline** #milestone
+
+Run `s1_smnist_signals_33b7362` finished après **99 min** (vs estimé 2.5h, plus rapide grâce aux optims s_spectral). Verdict pré-enregistré : **NO-GO** (`phase1b_passed=0`, retained_signals=NONE).
+
+**Métriques (n_examples=500, n_boot=2000) :**
+
+| Signal × Axe | ρ Spearman | IC95 | Seuil | Statut |
+|---|---|---|---|---|
+| S_Spectral × Δ | **+0.6973** | [0.6934, 0.7012] | > 0.70 | ❌ de **0.0027** |
+| S_Spectral × ω | +0.5985 | [0.5931, 0.6037] | > 0.70 | ❌ |
+| S_Spectral × ℋ | −0.1785 | [−0.1861, −0.1708] | \|·\| < 0.20 | ✅ |
+
+**Lecture scientifique** :
+- Critère ρ_ℋ ✅ — le signal n'est PAS confondu avec le bruit (vs smoke où c'était 0.68 → artefact petite taille)
+- Critère ρ_Δ ❌ de **0.0027 seulement** — le seuil 0.70 est *dans* l'IC95 → résultat statistiquement **indistinguable** du seuil
+- ρ_ω = 0.60 — clairement sous, signal moins corrélé à la profondeur de récursion
+
+**Décision méthodologique** : la spec DOC/01b recommande n_examples=2000, j'ai run à 500 par contrainte de temps. Re-run au n_examples=2000 (valeur spec, pas modification post-hoc des seuils) pour verdict définitif. Estimation 6-8h, fin probable 01:00-03:00 du matin.
+
+#### 17:11 Paris — Lancement phase 1.5 (500 ex) après long debug
+
+Smoke test phase 1.5 a révélé des bugs perf majeurs dans `compute_s_spectral` :
+
+1. **4 boucles Python imbriquées** (L×B×H×N) avec SVD à chaque iter → **6M SVDs CPU séquentielles**. Vectorisé en SVD batchée GPU per-layer.
+
+2. **FP64 SVD très lent sur RTX 5090 consumer** (FP64 nerfé à ~1/64 du FP32). Cast en FP32 pour SVD (suffisant pour compteur r_eff au-dessus d'un seuil).
+
+3. **cuSolver SVD fail à converger** sur fenêtres rank-deficient (attention concentrée). Switched to `eigvalsh(W W.T + ε·I)` avec ridge ε=1e-6 → convergence garantie sur PSD.
+
+4. **Skip warmup tokens** (t < K-1) où la fenêtre est zero-padded.
+
+Smoke 32 ex passe en 9 min après tous ces fix. Lancement full 500 ex ensuite.
 
 #### 15:07 Paris — **Phase 1 TERMINÉE — H1 validée qualitativement** #milestone
 
