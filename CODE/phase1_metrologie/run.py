@@ -154,10 +154,20 @@ def main(cfg: DictConfig) -> None:
             mlflow.log_metric("val_loss", val_metrics["val_loss"], step=epoch)
             mlflow.log_metric("val_acc", val_metrics["val_acc"], step=epoch)
 
+        # Checkpoint Oracle : sauvé à chaque amélioration val_loss (cf train_oracle),
+        # puis loggué comme artifact MLflow pour que phase 1.5 puisse recharger
+        # le même Oracle sans re-entraîner.
+        checkpoint_path = Path("/tmp") / f"{manifest.run_id}_oracle.ckpt"
         model, last_metrics = train_oracle(
             model_cfg=model_cfg, train_ds=train_subset, val_ds=val_ds,
             train_cfg=train_cfg, query_id=vocab.QUERY, metric_callback=_cb,
+            checkpoint_path=checkpoint_path,
         )
+        if checkpoint_path.exists():
+            mlflow.log_artifact(str(checkpoint_path), artifact_path="oracle")
+            print(f"==> Checkpoint Oracle uploadé MLflow : oracle/{checkpoint_path.name}", flush=True)
+        else:
+            print(f"AVERTISSEMENT : aucun checkpoint sauvegardé (val_loss n'a jamais amélioré ?)", flush=True)
 
         # --- Extraction sur audit_svd ---
         extractor = AttentionExtractor(model)
