@@ -59,6 +59,10 @@ class AttentionExtractor:
     ) -> AttentionDump:
         was_training = self.model.training
         self.model.eval()
+        # Aligner les tenseurs sur le device du modèle (Fabric peut le mettre sur cuda).
+        device = next(self.model.parameters()).device
+        tokens = tokens.to(device)
+        query_pos = query_pos.to(device)
         try:
             _ = self.model(tokens, query_pos, capture_attn=True)
             attn_per_layer: list[torch.Tensor] = []

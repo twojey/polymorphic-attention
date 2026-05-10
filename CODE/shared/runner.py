@@ -54,11 +54,11 @@ def hardware_fingerprint() -> dict[str, Any]:
     try:
         import torch
 
-        fp["torch"] = torch.__version__
+        fp["torch"] = str(torch.__version__)
         fp["cuda_available"] = bool(torch.cuda.is_available())
         if torch.cuda.is_available():
             fp["gpu"] = torch.cuda.get_device_name(0)
-            fp["cuda"] = torch.version.cuda
+            fp["cuda"] = str(torch.version.cuda)
             fp["device_capability"] = list(torch.cuda.get_device_capability(0))
             fp["vram_gb"] = round(
                 torch.cuda.get_device_properties(0).total_memory / (1024**3), 2

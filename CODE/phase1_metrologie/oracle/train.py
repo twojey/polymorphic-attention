@@ -34,18 +34,19 @@ class TrainConfig:
     grad_clip: float = 1.0
     log_interval_steps: int = 50
     precision: str = "bf16-mixed"
+    num_workers: int = 4                   # DataLoader CPU workers
+    compile: bool = True                   # torch.compile pour kernel fusion
 
 
-def collate(samples: list[StructureMNISTSample]) -> dict[str, torch.Tensor]:
-    tokens = torch.stack([s.tokens for s in samples], dim=0)
+def collate(samples: list[StructureMNISTSample], pad_id: int = 0) -> dict[str, torch.Tensor]:
+    # Pad to max length in batch — sweep ConcatDataset peut mélanger seq_len
+    # variables (ω/Δ/ℋ produisent des longueurs différentes).
+    from torch.nn.utils.rnn import pad_sequence
+    tokens = pad_sequence([s.tokens for s in samples], batch_first=True, padding_value=pad_id)
     targets = torch.tensor([s.target for s in samples], dtype=torch.int64)
     omegas = torch.tensor([s.omega for s in samples], dtype=torch.int64)
     deltas = torch.tensor([s.delta for s in samples], dtype=torch.int64)
     entropies = torch.tensor([s.entropy for s in samples], dtype=torch.float32)
-    # query_pos : indice du dernier token QUERY (par construction = avant le PAD final)
-    # Méthode : dernier index où token == QUERY ID (à passer en argument séparé en pratique).
-    # Ici on assume que la position QUERY est la même pour tous les exemples du batch
-    # (vrai dans un sweep monovarié à ω/Δ fixés).
     return {
         "tokens": tokens,
         "targets": targets,
@@ -104,6 +105,9 @@ def train_oracle(
     `metric_callback(epoch, train_loss, val_metrics)` est appelé à chaque
     époque si fourni — branche MLflow ici.
     """
+    # TF32 high precision pour matmul auxiliaires (init, lstsq batterie 2)
+    torch.set_float32_matmul_precision("high")
+
     fabric = fabric or Fabric(precision=train_cfg.precision)
     fabric.launch()
 
@@ -111,11 +115,22 @@ def train_oracle(
     optimizer = torch.optim.AdamW(model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay)
     model, optimizer = fabric.setup(model, optimizer)
 
+    # Kernel fusion via torch.compile (dynamic=True pour gérer les seq_len variables
+    # du sweep ConcatDataset sans recompilation par shape).
+    if train_cfg.compile:
+        model = torch.compile(model, dynamic=True)
+
+    from functools import partial as _partial
+    collate_fn = _partial(collate, pad_id=model_cfg.pad_id)
     train_loader = DataLoader(
-        train_ds, batch_size=train_cfg.batch_size, shuffle=True, collate_fn=collate, drop_last=True
+        train_ds, batch_size=train_cfg.batch_size, shuffle=True, collate_fn=collate_fn, drop_last=True,
+        num_workers=train_cfg.num_workers, pin_memory=True,
+        persistent_workers=train_cfg.num_workers > 0,
     )
     val_loader = DataLoader(
-        val_ds, batch_size=train_cfg.batch_size, shuffle=False, collate_fn=collate
+        val_ds, batch_size=train_cfg.batch_size, shuffle=False, collate_fn=collate_fn,
+        num_workers=max(train_cfg.num_workers // 2, 1), pin_memory=True,
+        persistent_workers=train_cfg.num_workers > 0,
     )
     train_loader, val_loader = fabric.setup_dataloaders(train_loader, val_loader)
 

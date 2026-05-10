@@ -120,6 +120,8 @@ def main(cfg: DictConfig) -> None:
         plateau_tolerance=cfg.training.plateau_tolerance,
         grad_clip=cfg.training.grad_clip,
         precision=cfg.training.precision,
+        num_workers=cfg.training.get("num_workers", 4),
+        compile=cfg.training.get("compile", True),
     )
 
     # --- Manifest + MLflow run ---
@@ -160,7 +162,10 @@ def main(cfg: DictConfig) -> None:
         # --- Extraction sur audit_svd ---
         extractor = AttentionExtractor(model)
         audit_subset = Subset(sweep_full, parts["audit_svd"][: cfg.extraction.batch_size].tolist())
-        loader = DataLoader(audit_subset, batch_size=cfg.extraction.batch_size, collate_fn=collate)
+        from functools import partial as _partial
+        loader = DataLoader(audit_subset, batch_size=cfg.extraction.batch_size,
+                            collate_fn=_partial(collate, pad_id=vocab.PAD),
+                            num_workers=2, pin_memory=True)
         for batch in loader:
             tokens = batch["tokens"]
             qpos = find_query_positions(tokens, vocab.QUERY)

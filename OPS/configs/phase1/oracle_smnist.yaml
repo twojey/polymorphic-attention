@@ -4,8 +4,8 @@
 
 defaults:
   - _self_
-  - thresholds_phase1: thresholds_phase1
-  - dataset_split_smnist: dataset_split_smnist
+  - thresholds_phase1@thresholds_phase1
+  - dataset_split_smnist@dataset_split_smnist
 
 # --- Domaine ---
 domain: smnist
@@ -52,6 +52,8 @@ training:
   grad_clip: 1.0
   log_interval_steps: 50
   precision: bf16-mixed         # DOC/01 §8.4
+  num_workers: 4                # DataLoader CPU workers (overlap data prep / GPU compute)
+  compile: true                 # torch.compile dynamic=True (kernel fusion 1.5-2x sur RTX 5090)
 
 # --- Extraction (post-training, FP64) ---
 extraction:

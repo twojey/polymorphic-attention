@@ -50,4 +50,6 @@ exec uv run mlflow server \
   --host "$MLFLOW_HOST" \
   --port "$MLFLOW_PORT" \
   --backend-store-uri "sqlite:///$MLFLOW_DIR/mlflow.db" \
-  --default-artifact-root "$MLFLOW_DIR/artifacts"
+  --default-artifact-root "mlflow-artifacts:/" \
+  --artifacts-destination "$MLFLOW_DIR/artifacts" \
+  --serve-artifacts
