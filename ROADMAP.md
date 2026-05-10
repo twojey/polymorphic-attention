@@ -2,7 +2,12 @@
 
 ## Contexte de reprise (lire en premier)
 
-**État courant (mai 2026)** : spec V3.5 complète + **pré-prep VPS maximale terminée**. 7+ commits sur `master`. **119 tests CPU passent** (~7s). Stack arrêtée. Aucun run sur GPU encore — tout attend l'accès au pod RunPod RTX 5090.
+**État courant (2026-05-10 19:35 CEST)** : Sprint 1 en cours d'exécution sur VPS.
+- ✅ **Phase 1 terminée** (run `s1_smnist_oracle_e2f0b5e`, 12 epochs, 2h08, plateau atteint)
+- 🔄 **Phase 1.5 en cours** : run 2000 ex VPS CPU lancé 19:35, **fin estimée 01:35 du matin**, PID 343518 (nohup, indépendant Claude)
+- 🟡 **Pivot VPS-only** : user refuse usage continu pod RunPod, tout phase 1.5+ tourne sur VPS désormais
+
+**Lire en premier au retour** : `DOC/carnet_de_bord.md` (entrées datées, derniers résultats, hypothèses, surprises). Section "Démarrage session suivante" plus bas pour la procédure exacte.
 
 **Question scientifique cadrée** : *« peut-on, avec les outils mathématiques actuels, synthétiser une attention linéaire ou superlinéaire sans trade-off majeur à partir d'oracles quadratiques ? »* — réponse OUI ou NON, les deux acceptables.
 
@@ -63,94 +68,90 @@ Décisions cadres prises (Sprint 1) :
 - `phase5_pareto.run` — après que phase 3 ait produit l'ASPLayer concrète (les fonctions de test sont déjà testées et prêtes à être branchées)
 
 
-## 🚀 Démarrage session suivante (à l'arrivée du pod)
+## 🚀 Démarrage session suivante
 
-**Lis CETTE section en premier au reboot.** Elle te dit exactement quoi faire pour reprendre sans frottement.
+**Lis CETTE section en premier au retour.** État au 2026-05-10 19:35 CEST.
 
-### Étape 1 — Bloquants externes (sans pod, ~15 min)
+### Étape 0 — D'abord, vérifier le run nuit phase 1.5
 
-Faisables sur le VPS avant même d'avoir le pod :
-
-1. **Push le repo sur un remote git privé**
-   ```bash
-   cd /root/polymorphic-attention
-   git remote add origin <url>          # GitHub privé / Gitea / etc.
-   git push -u origin master
-   ```
-2. **Lance MLflow server sur le VPS dans tmux/systemd**
-   ```bash
-   tmux new -s mlflow
-   bash OPS/scripts/start_mlflow_server.sh
-   # Ctrl-B D pour détacher
-   ```
-   Vérification : `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5000/` → `200`
-3. **Configure une clé SSH du pod vers le VPS** (pour le tunnel MLflow). Génère sur le pod, copie la pubkey dans `~/.ssh/authorized_keys` du VPS.
-
-### Étape 2 — Sur le pod (≈ 30 min de setup)
-
-1. **Crée le pod RunPod**
-   - GPU : `NVIDIA GeForce RTX 5090`
-   - Cloud type : `COMMUNITY`
-   - Image : `pytorch/pytorch:2.7.0-cuda12.8-cudnn9-devel`
-   - Volume : 100 GB, Container disk : 40 GB
-   - Port : 22/tcp
-
-2. **Clone + setup**
-   ```bash
-   git clone <url> /workspace/polymorphic-attention
-   cd /workspace/polymorphic-attention
-   bash OPS/scripts/setup_env.sh                # idempotent, install uv + deps
-   ```
-   Si l'index `cu128` n'existe pas → bascule `cu126` ou `cu124` dans `pyproject.toml § [[tool.uv.index]]`, regénère `uv.lock` (`uv lock`), commit, repush, repull.
-
-3. **Tunnel SSH vers le VPS pour MLflow**
-   ```bash
-   ssh -N -f -L 5000:127.0.0.1:5000 user@<vps_ip>
-   export MLFLOW_TRACKING_URI=http://localhost:5000
-   ```
-
-4. **Stage 0.2 — validation primitives Blackwell**
-   ```bash
-   PYTHONPATH=CODE uv run python OPS/scripts/validate_primitives.py
-   ```
-   Cherche : `is_blackwell: True`, `device_capability: (12, 0)`, 6/6 checks ✅. Colle la sortie dans `OPS/env/PRIMITIVES.md`. Commit.
-
-### Étape 3 — Sprint 1 (≈ 30 GPU-h prévues)
+Un run phase 1.5 sur 2000 exemples tourne sur le **VPS** depuis 19:35 (PID 343518, log `/tmp/phase1b_vps_2000.log`). Fin estimée **~01:35 du matin**.
 
 ```bash
-PYTHONPATH=CODE uv run python -m phase1_metrologie.run \
-    --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist
+# Vérifier si le run est terminé
+pgrep -f phase1b_calibration_signal.run >/dev/null && echo "Encore en cours" || echo "Terminé"
+
+# Récupérer les métriques finales
+curl -s http://127.0.0.1:5000/api/2.0/mlflow/runs/search -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"experiment_ids":["3"],"max_results":1,"order_by":["attributes.start_time DESC"]}' \
+  | python3 -m json.tool | grep -E "(rho|status|run_name|phase1b_passed)"
+
+# Ou utiliser le script de monitoring (adapter EXPERIMENT_ID=3 pour phase 1.5)
+EXPERIMENT_ID=3 POD_IP="" bash OPS/scripts/monitor_run.sh 2>&1 | head -30
 ```
 
-Le driver enchaîne : SSG tri-partition → Oracle dense Transformer → extraction A FP64 sur audit_svd → Hankel + entropie spectrale par régime → MLflow + manifest. Sortie attendue : un run MLflow `phase1_s1_smnist_oracle_<short_hash>` consultable depuis le VPS.
+### Étape 1 — Selon verdict phase 1.5
 
-Puis phase 1.5 :
+**Si GO net** (ρ_Δ > 0.70 hors IC95 ET |ρ_ℋ| < 0.20) :
+1. Mettre à jour `DOC/carnet_de_bord.md` avec les chiffres finaux (commit attendu : `c1c7210` est le dernier)
+2. Mettre à jour H2 dans le carnet (statut "validée")
+3. Préparer le rapport phase 1.5 dans `DOC/reports/phase1b_template.md` → `DOC/reports/phase1b.md`
+4. Décision : continuer Sprint 2 (phase 2 audit spectral) — drivers déjà prêts
+
+**Si NO-GO** (les critères ne passent pas) :
+1. Mettre à jour `DOC/carnet_de_bord.md` avec verdict + analyse
+2. **Respecter le pré-enregistrement T.1** : sortie anticipée n°1, papier court négatif
+3. Discuter méthodologie : seuil 0.70 arbitraire vs signal réel ? Bench réduit Δ ≤ 64 a-t-il biaisé ?
+
+**Si toujours borderline** :
+1. Documenter explicitement
+2. Discuter avec user : étendre bench (impossible sans GPU), accepter NO-GO formel, ou autre
+
+### Étape 2 — Avant Sprint 2, refactor extract.py per-layer
+
+⚠ **Bloquant pour Sprint 2** : la capture `capture_attn=True` matérialise les A de tous les layers en simultané (B × 6 layers × H × N²). Sur VPS sans GPU c'est OOM dès N > 2000. Refactor nécessaire :
+- Extract `last_attn` per-layer immédiatement après le forward du block, libérer la mémoire avant le block suivant
+- Modifier `extract.py` + tests
+- Permet bench plus large (Δ jusqu'à 1024 voire plus)
+
+### Étape 3 — Sprint 2 si GO
+
+Driver `phase2_audit_spectral.run` déjà prêt. Pré-requis :
+- Avoir les matrices A extraites (depuis MLflow artifacts ou re-extraction)
+- Phase 1.5 GO confirmé
+
 ```bash
-PYTHONPATH=CODE uv run python -m phase1b_calibration_signal.run \
-    --config-path=../../OPS/configs/phase1b --config-name=signals \
-    oracle_checkpoint=<path/to/oracle.ckpt>
+PYTHONPATH=CODE uv run python -m phase2_audit_spectral.run \
+    --config-path=../../OPS/configs/phase2 --config-name=audit
 ```
 
-### Étape 4 — Décision Sprint 1 → Sprint 2
+### Topologie hardware actuelle
 
-Si phase 1.5 GO → phase 2 (driver `phase2_audit_spectral.run` déjà prêt).
-Si phase 1.5 NO-GO → rapport négatif court (cf. "Repères de sortie anticipée"), fin du protocole.
+**VPS (machine de calcul depuis le pivot 19:00)** :
+- 4 CPU cores, 15 GB RAM (~9 GB dispo après Lumis)
+- Pas de GPU
+- Disque ~9 GB libre (98 % full, Lumis prend 128 GB)
+- MLflow tourne en proxy mode sur 127.0.0.1:5000
 
-### Pièges connus à anticiper
+**Pod RunPod RTX 5090** : **non utilisé** depuis pivot. Si besoin réactiver pour Sprint 2+ (refactor extract.py + GPU pour bench full), discuter avec user explicitement avant de relancer un pod.
 
-- Index PyTorch `cu128` peut nécessiter bascule `cu126`/`cu124` (cf. STACK.md § Évolutions)
-- Driver NVIDIA < 555 → warning Blackwell. Vérifier `nvidia-smi` au démarrage du pod
-- MLflow OSS sans auth → bind 127.0.0.1 obligatoire, accès via tunnel SSH
+### Pièges connus à anticiper (mise à jour VPS-only)
+
+- **OOM RAM VPS** : capture_attn matérialise N²×6×8 simultanément. Pour V1 driver, bench réduit à Δ ≤ 64 → max seq_len ~1043
+- **Disque VPS plein** : 9 GB libre seulement, Lumis peut remplir. Surveiller avec `df -h /`
+- **Lumis docker containers** : 18+ containers actifs sur le VPS, ne pas faire de `docker system prune`. Seul `docker builder prune` est safe (~7 GB récupérables si besoin)
 - Aucun run "registered" possible si `git status` est dirty (cf. `shared.runner.git_status_clean`)
+- Print Python en file redirect → toujours `PYTHONUNBUFFERED=1` ou `python -u`
 
 ### Documents à consulter en cas de doute
 
-- `OPS/env/STACK.md` — stack ML, primitives à valider, contraintes Blackwell
-- `OPS/env/HARDWARE.md` — topologie pod, ENV vars Blackwell, pièges 5090 (issus Lumis)
-- `OPS/env/LOGGING.md` — MLflow self-hosted, tunnel SSH, conventions runs
-- `OPS/configs/README.md` — pré-enregistrement, conventions configs
+- **`DOC/carnet_de_bord.md`** ← **lire en premier au retour, journal vivant**
+- `DOC/00_vision.md` — thèse, scope, principe Discovery > Reproduction
+- `DOC/01b_phase_calibration_signal.md` — spec phase 1.5
 - `DOC/falsifiabilite.md` — règles d'application du protocole
 - `DOC/glossaire.md` — terminologie V3.5 canonique
+- `OPS/env/SETUP.md` — setup pod (au cas où on le rebrancherait Sprint 2+)
+- `OPS/env/STACK.md` — stack ML, contraintes Blackwell (info pour pod si réactivation)
 
 ---
 
@@ -249,21 +250,24 @@ Spec : [DOC/01_phase_metrologie.md](DOC/01_phase_metrologie.md)
 - [x] Index disjoints garantis par construction (testé, 4 tests passent)
 - [ ] Hash des séquences pour audit a posteriori — TODO post-extraction sur le pod (logger dans manifest)
 
-### 1.3 — Entraînement Oracle (à exécuter sur le pod)
+### 1.3 — Entraînement Oracle ✅ exécuté
 - [x] Driver `phase1_metrologie.run` enchaîne sweep + train + extract + métriques
 - [x] Sweep monovarié ω implémenté (`sweep_monovariate(axis="omega", ...)`)
 - [x] Sweep monovarié Δ implémenté
 - [x] Sweep monovarié ℋ implémenté
 - [x] Sweep croisé implémenté (`crossed_sweep(axis1, axis2, ...)`) — pas branché dans run.py V1, à brancher au pod
-- [ ] Exécution sur le pod (~30 GPU-h prévues, plafond 60)
-- [ ] Persistence des poids via MLflow artifacts
+- [x] **Exécution sur le pod 2026-05-10 12:34→15:05** (1h40 vs 30h plafond, run `s1_smnist_oracle_e2f0b5e`, 12 epochs, plateau)
+- [x] **Persistence des poids via MLflow artifacts** : `OPS/logs/mlflow/artifacts/2/.../oracle/s1_smnist_oracle_e2f0b5e_oracle.ckpt` (19 MB, commit `e2f0b5e`)
 
-### 1.4 — Métriques ✅ code prêt
+### 1.4 — Métriques ✅ exécuté (V1 limité)
 - [x] Extraction des matrices d'attention par (couche, tête, exemple) FP64 — `CODE/phase1_metrologie/oracle/extract.py`
 - [x] Rang de Hankel numérique — `CODE/phase1_metrologie/metrics/hankel.py`
 - [x] Entropie spectrale H = -Σ p_k log p_k — `CODE/phase1_metrologie/metrics/spectral.py`
 - [x] Tests sur matrices synthétiques (rank-1 outer product → 0, uniforme → log N, exponential signal → Hankel rank 1, etc.)
-- [ ] Agrégation par régime (ω, Δ, ℋ) — TODO post-extraction sur le pod
+- [x] **Métriques calculées sur 4 exemples extraits** (V1 driver fait `break` après un batch — rapport phase1) :
+  - Hankel rank moyen par layer : 19-26 (rang/N ~0.3 % vs seuil 50 %) ✅
+  - H_spectral : 0.29-0.99 (H/log(N) ~3-11 % vs seuil 50 %) ✅
+- [ ] **Agrégation par régime (ω, Δ, ℋ)** — pas calculée en V1 (4 ex non stratifiés). Refactor extract.py per-layer + boucle sur audit_svd entier nécessaire avant Sprint 2.
 
 ### 1.5 — Livrables
 - [x] Helpers plot prêts (`shared.plotting.monovariate_curve`, `heatmap_2d`, `stress_rank_map`)
@@ -316,13 +320,20 @@ Spec : [DOC/01b_phase_calibration_signal.md](DOC/01b_phase_calibration_signal.md
 - [x] Helpers : `correlation_matrix_heatmap` dans `shared.plotting`
 - [x] Driver `phase1b_calibration_signal.run` produit la matrice + verdict + tags MLflow `retained_signals`
 - [x] Template `DOC/reports/phase1b_template.md`
-- [ ] Génération effective post-run sur le pod
-- [ ] Verdict de Distillabilité — driver `run_distillability` prêt
+- [x] **Run pod 500 ex (2026-05-10 17:11→18:51)** : ρ_Δ=0.6973 IC[0.693,0.701] **NO-GO borderline**
+- [🔄] **Run VPS 2000 ex en cours (2026-05-10 19:35 → ~01:35)** : verdict définitif attendu au matin
+- [ ] Verdict de Distillabilité — driver `run_distillability` prêt, à lancer post-verdict
 
 ### 1b.8 — 🚪 Go/no-go phase 1.5 (**point de défaillance n°1**)
 - [ ] Au moins un signal valide les deux critères sur ≥ 1 axe
 - [ ] Si **no-go** : arrêt total — *l'allocation dynamique par token est une illusion statistique*
 - [ ] Si **go** : passage stage 2
+
+**État courant au 19:35** :
+- S_KL désactivé en V1 (calibration baseline incompatible avec seq_len variable du bench)
+- S_Grad pas testé (nécessite gradient access en mode entraînement)
+- S_Spectral seul testé. Pod 500 ex : ρ_Δ=0.70 borderline. VPS 32 ex bench réduit (Δ ≤ 64) : ρ_Δ=0.77.
+- Run VPS 2000 ex en cours pour verdict propre.
 
 ---
 
