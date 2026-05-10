@@ -139,7 +139,22 @@ defaults:
 
 ## Avancement chronologique
 
-### 2026-05-10 lundi (soirée)
+### 2026-05-10 lundi (soirée — 19:00 pause pod)
+
+#### 19:00 Paris — Pause pod #pause-point
+
+État au moment de la pause :
+- **Code** : commit `f7e979d` — multiprocessing bootstrap codé, **pas testé**
+- **Run actuel** : aucun (le 2000-ex run a été killé pour fixer le bootstrap)
+- **À reprendre demain** :
+  1. Resume pod RunPod
+  2. Sync `.git` du VPS vers pod (`rsync -az --delete .git/ pod:/workspace/.../.git/`)
+  3. `git checkout -- .` sur le pod pour aligner working tree
+  4. Smoke test mp bootstrap : `bash OPS/scripts/setup_pod.sh` puis run 32 ex pour valider mp
+  5. Si OK, lancer 2000-ex avec nohup (estimé 3-4h grâce au speedup mp)
+  6. Analyser, MAJ carnet, commit
+
+**Rien d'irréversible**, tout est sur VPS (commits + manifests + MLflow + carnet).
 
 #### 18:51 Paris — **Phase 1.5 (500 ex) terminée — NO-GO borderline** #milestone
 
