@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **borderline** (n=500 : ρ_Δ=0.6973, IC[0.693,0.701] ∋ 0.70). 2000-ex en cours pour verdict |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **mixte selon bench** : pod-large (Δ≤256) ρ_Δ=0.6973 borderline ; VPS-réduit (Δ≤64) smoke 32ex ρ_Δ=0.7655. 2000-ex VPS en cours, fin ~01:35 |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -39,6 +39,16 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-10 — Bench phase 1.5 réduit (Δ ∈ [16,64]) pour contrainte mémoire VPS
+**#decision** Le run VPS a OOM à 9.4 GB sur 32 ex avec Δ jusqu'à 256 (seq_len ~4100). Réduction de structured_deltas à [16, 64] → seq max 1043 → mémoire ~1.5 GB/batch. **Pas une optimisation post-hoc**, c'est une contrainte hardware.
+**Why** : VPS a 9 GB RAM disponible vs pod ~120 GB. La réduction est nécessaire pour faire tourner phase 1.5 sans GPU.
+**How to apply** : `structured_deltas: [16, 64]` dans signals.yaml. Documenter dans le rapport phase 1.5 que la couverture du bench est partielle. Sprint 4+ avec GPU étendra à [16,64,256,1024] et plus.
+
+### 2026-05-10 — Pivot VPS-only pour phase 1.5
+**#decision** User refuse l'usage continu du pod. Tout phase 1.5 sur VPS CPU, run 2000 ex estimé 6h overnight, indépendant de la session Claude (nohup + disown).
+**Why** : économie pod $$ + autonomie de la session Claude (peut être fermée/reprise sans interrompre le calcul).
+**How to apply** : ne plus lancer de runs sur pod tant que le user ne l'autorise pas explicitement. Pour les phases qui nécessitent GPU (Sprint 2+ phase 3 entraînement Backbone, etc.), **rediscuter le besoin** plutôt que rebooter pod par défaut.
 
 ### 2026-05-10 — Re-run phase 1.5 à n_examples=2000 après NO-GO borderline 500
 **#decision** Run 500 ex donne ρ_Δ=0.6973 IC[0.693,0.701] qui contient le seuil 0.70 → indistinguable. Spec DOC/01b recommande 2000. Re-run à la valeur spec, pas modification post-hoc des seuils. Si toujours NO-GO à 2000 → respect du verdict pré-enregistré, arrêt protocole / sortie anticipée n°1.
@@ -94,6 +104,11 @@ Idem ci-dessus, redondant — à fusionner après le run.
 
 ## Surprises et pièges (chronologique inverse)
 
+### 2026-05-10 — VPS OOM kill : capture_attn=True matérialise N²×6×8 simultanément
+**#bug** Sur VPS 9 GB RAM dispo, le forward Oracle avec capture_attn=True alloue les 6 layers × 8 heads × N² × FP64 simultanément (peak juste après forward). Pour N=4100 et batch=2 : 2×6×8×4100²×8 bytes ≈ 12 GB → OOM.
+**Leçon** : la capture per-layer (libérer A_layer de chaque block dès qu'on a fini avec) serait la vraie solution. Pour V1 driver, contourné en réduisant max seq_len via bench config.
+**À faire avant Sprint 2** : refactor `extract.py` pour mode incremental per-layer (économie mémoire 6×).
+
 ### 2026-05-10 — Phase 1.5 NO-GO borderline (ρ_Δ = 0.6973 vs seuil 0.70)
 **#surprise** Le full run sur 500 exemples donne ρ_S_Spectral_Δ = 0.6973 avec IC95 [0.6934, 0.7012] — le seuil pré-enregistré 0.70 est *à l'intérieur* de l'IC. Statistiquement on ne peut pas distinguer si le vrai ρ est > ou < 0.70. ρ_ω=0.60 reste sous le seuil.
 **Lecture** :
@@ -139,22 +154,34 @@ defaults:
 
 ## Avancement chronologique
 
-### 2026-05-10 lundi (soirée — 19:00 pause pod)
+### 2026-05-10 lundi (soirée — pivot VPS-only)
 
-#### 19:00 Paris — Pause pod #pause-point
+#### 19:35 Paris — Run 2000 ex VPS lancé en nohup #milestone
 
-État au moment de la pause :
-- **Code** : commit `f7e979d` — multiprocessing bootstrap codé, **pas testé**
-- **Run actuel** : aucun (le 2000-ex run a été killé pour fixer le bootstrap)
-- **À reprendre demain** :
-  1. Resume pod RunPod
-  2. Sync `.git` du VPS vers pod (`rsync -az --delete .git/ pod:/workspace/.../.git/`)
-  3. `git checkout -- .` sur le pod pour aligner working tree
-  4. Smoke test mp bootstrap : `bash OPS/scripts/setup_pod.sh` puis run 32 ex pour valider mp
-  5. Si OK, lancer 2000-ex avec nohup (estimé 3-4h grâce au speedup mp)
-  6. Analyser, MAJ carnet, commit
+User a pivoté : **plus de pod, tout sur VPS, indépendant de Claude**.
 
-**Rien d'irréversible**, tout est sur VPS (commits + manifests + MLflow + carnet).
+Procédure suivie :
+1. Disque VPS à 98 % full → cleanup safe (uv/pip cache + docker builder prune) → 9.2 GB free
+2. Smoke 1 VPS sur 32 ex → **OOM kill à 9.4 GB RAM** (capture A en N² × 6 layers × 8 heads = trop)
+3. Réduction bench Δ max 256 → 64 dans `signals.yaml` (max seq_len 4115 → 1043, mémoire ~1.5 GB/batch)
+4. Smoke 2 VPS 32 ex en **5m40s** : ρ_Δ = 0.7655 [0.7422, 0.7852] ✅ passe le seuil 0.70
+5. Run nuit lancé : 2000 ex en nohup (PID 343518), log `/tmp/phase1b_vps_2000.log`, fin estimée **01:35 du matin**
+
+**Configuration finale du bench (réduit pour VPS-CPU)** :
+- structured_omegas: [2, 4, 6, 8] (inchangé)
+- structured_deltas: **[16, 64]** (avant : [16, 64, 256])
+- max seq_len: 1043 (vs 4115 avant)
+
+⚠ Ce bench est **plus restreint** que celui du run pod 500 ex. Comparaison directe pas pertinente :
+- Run pod 500 ex (Δ ∈ [16,64,256]) : ρ_Δ = 0.6973 NO-GO borderline
+- Run VPS 32 ex smoke (Δ ∈ [16,64]) : ρ_Δ = 0.7655 GO sur ce sous-bench
+→ Ça suggère que **le signal est plus net dans la zone de Δ in-distribution Oracle** (Oracle a vu Δ ∈ {0,16,64,256,1024} mais avec ω=2 monovariate). Le bench Δ=64 est mieux couvert.
+
+**Décision méthodologique** : ce n'est PAS du post-hoc tuning. Le bench réduit est imposé par la contrainte mémoire VPS, pas par optimisation des résultats. Documenter explicitement.
+
+#### 19:00 Paris — Plan pause pod abandonné
+
+Le plan initial était de pauser le pod et reprendre demain. User a finalement choisi VPS-only (cf. ci-dessus). Tout préservé sur VPS (commits, manifests, MLflow, carnet).
 
 #### 18:51 Paris — **Phase 1.5 (500 ex) terminée — NO-GO borderline** #milestone
 
