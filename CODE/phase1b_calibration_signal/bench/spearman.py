@@ -1,11 +1,16 @@
 """
 spearman.py — corrélations de Spearman avec bootstrap IC95% pour la matrice
 3×3 du banc phase 1.5 (DOC/01b §2.2, §4).
+
+Bootstrap parallélisé via multiprocessing.Pool (fork-shared x, y sur Linux) :
+sur N CPU, gain quasi-linéaire jusqu'à ~min(N_cpu, n_boot).
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from multiprocessing import Pool, get_context
 
 import numpy as np
 from scipy import stats
@@ -19,25 +24,86 @@ class SpearmanResult:
     n: int
 
 
+# Variables globales remplies par _init_worker via initializer.
+# Évite de copier x, y dans chaque tâche (fork partage la mémoire COW).
+_WORKER_X: np.ndarray | None = None
+_WORKER_Y: np.ndarray | None = None
+
+
+def _init_worker(x: np.ndarray, y: np.ndarray) -> None:
+    global _WORKER_X, _WORKER_Y
+    _WORKER_X = x
+    _WORKER_Y = y
+
+
+def _bootstrap_chunk(args: tuple[int, int]) -> np.ndarray:
+    """Worker : exécute `n_iter` itérations bootstrap avec seed donnée."""
+    seed, n_iter = args
+    assert _WORKER_X is not None and _WORKER_Y is not None
+    x, y = _WORKER_X, _WORKER_Y
+    n = x.size
+    rng = np.random.default_rng(seed)
+    rhos = np.empty(n_iter, dtype=np.float64)
+    for i in range(n_iter):
+        idx = rng.integers(0, n, size=n)
+        rhos[i] = float(stats.spearmanr(x[idx], y[idx]).statistic)
+    return rhos
+
+
 def bootstrap_spearman_ci(
-    x: np.ndarray, y: np.ndarray, *, n_boot: int = 2000, seed: int = 0, alpha: float = 0.05
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    n_boot: int = 2000,
+    seed: int = 0,
+    alpha: float = 0.05,
+    n_workers: int | None = None,
 ) -> SpearmanResult:
-    """Spearman ρ avec IC bootstrap.
+    """Spearman ρ avec IC bootstrap parallélisé.
 
     Sous-échantillonnage par paire (i, i) — pour respecter l'indépendance,
     cf. DOC/01b §8 : sous-échantillonner en amont avant d'appeler cette
     fonction (un token tous les K, par exemple).
+
+    `n_workers=None` → utilise `os.cpu_count() - 1` par défaut. Pour
+    désactiver le parallélisme (debug, environnement contraint) :
+    `n_workers=1` → exécution séquentielle dans le process principal.
     """
     assert x.shape == y.shape and x.ndim == 1
     n = x.size
     if n < 4:
         return SpearmanResult(rho=float("nan"), ci_low=float("nan"), ci_high=float("nan"), n=n)
+
     rho_full = float(stats.spearmanr(x, y).statistic)
-    rng = np.random.default_rng(seed)
-    rhos = np.empty(n_boot, dtype=np.float64)
-    for b in range(n_boot):
-        idx = rng.integers(0, n, size=n)
-        rhos[b] = float(stats.spearmanr(x[idx], y[idx]).statistic)
+
+    if n_workers is None:
+        n_workers = max(1, (os.cpu_count() or 2) - 1)
+    n_workers = min(n_workers, n_boot)
+
+    if n_workers <= 1:
+        # Pas de parallélisme — chemin séquentiel (utile pour debug).
+        rng = np.random.default_rng(seed)
+        rhos = np.empty(n_boot, dtype=np.float64)
+        for b in range(n_boot):
+            idx = rng.integers(0, n, size=n)
+            rhos[b] = float(stats.spearmanr(x[idx], y[idx]).statistic)
+    else:
+        # Découpe les n_boot itérations en n_workers chunks équilibrés.
+        chunk_base = n_boot // n_workers
+        remainder = n_boot % n_workers
+        chunks: list[tuple[int, int]] = []
+        for w in range(n_workers):
+            n_iter = chunk_base + (1 if w < remainder else 0)
+            if n_iter > 0:
+                # Seeds distincts par worker pour indépendance reproductible
+                chunks.append((seed + w * 100003, n_iter))
+
+        # Fork context : partage x, y en COW (zero-copy sur Linux).
+        ctx = get_context("fork")
+        with ctx.Pool(n_workers, initializer=_init_worker, initargs=(x, y)) as pool:
+            results = pool.map(_bootstrap_chunk, chunks)
+        rhos = np.concatenate(results)
+
     lo = float(np.quantile(rhos, alpha / 2))
     hi = float(np.quantile(rhos, 1 - alpha / 2))
     return SpearmanResult(rho=rho_full, ci_low=lo, ci_high=hi, n=n)
