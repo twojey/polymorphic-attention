@@ -18,7 +18,7 @@ model:
   n_layers: 6
   d_ff: 1024
   dropout: 0.0        # entraînement Oracle = pas de régularisation lourde
-  max_seq_len: 4096   # ≥ Δ_max prévu en sweep (DOC/01 §8.2)
+  max_seq_len: 8192   # SSG seq_len ≈ 1+1+ω×(2Δ+2)+1 ; pour Δ=1024 ω=2 → ~5100, marge x1.6
   n_classes: 10       # prédire le résultat ∈ [0, 10)
   # vocab_size et pad_id calculés automatiquement à partir du SSG
 
