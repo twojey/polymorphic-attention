@@ -33,6 +33,11 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
+# NB refactor 2026-05-11 : extract.py expose désormais extract_per_layer /
+# extract_streamed / extract_windowed_per_layer (cf. DOC/00b §II.7). Phase 1.5
+# garde extract() (backward compat) car compute_s_kl et compute_s_spectral ont
+# besoin de TOUTES les couches simultanément (max-pool cross-layer). Pour phase 2
+# (audit spectral indépendant par couche), préférer extract_per_layer.
 from phase1_metrologie.oracle.extract import AttentionExtractor
 from phase1_metrologie.oracle.train import collate, find_query_positions
 from phase1_metrologie.oracle.transformer import OracleConfig, OracleTransformer
@@ -144,24 +149,35 @@ def _calibrate_kl_baseline(
         n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
     )
 
-    # batch_size adaptatif : cible peak ~30 GB par batch (B*L*H*N²*8 ≤ 30e9)
-    # Avec L=6, H=8 fixes : B ≤ 30e9 / (6*8*N²*8) = 78M / N²
+    # batch_size adaptatif : cible peak ~15 GB par batch (B*L*H*N²*8 ≤ 15e9), cap à 2.
+    # Le cap 2 est conservateur : le crash silencieux du Run 3 (2026-05-11 12:12) est
+    # arrivé à seq_len=4371 batch_size=4 (calculé 14.7 GB) ; on suspecte que les
+    # activations FFN du forward (non comptées dans l'estimation) poussent le peak
+    # au-delà de la marge utilisable. Cf. carnet 2026-05-11 entrée crash Run 3.
     if batch_size is None:
         L_assumed, H_assumed = 6, 8
-        max_batch = max(1, int(30e9 / (L_assumed * H_assumed * seq_len_target**2 * 8)))
-        batch_size = min(16, max_batch)
+        max_batch = max(1, int(15e9 / (L_assumed * H_assumed * seq_len_target**2 * 8)))
+        batch_size = min(2, max_batch)
         print(
             f"  Calibration baseline : seq_len={seq_len_target}, batch_size={batch_size} "
-            f"(adaptatif pour rester sous 30 GB/batch)", flush=True
+            f"(cap=2, cible <15 GB/batch)", flush=True
         )
+    print(f"  [calib] StructureMNISTDataset config: ω={cal_omega}, δ={cal_delta}, ℋ={cal_entropy}", flush=True)
     ds = StructureMNISTDataset(cfg)
+    print(f"  [calib] dataset prêt, {len(ds)} exemples ; instancie DataLoader", flush=True)
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=_make_padded_collate(vocab.PAD))
 
+    print(f"  [calib] instancie AttentionExtractor", flush=True)
     extractor = AttentionExtractor(oracle)
     accumulators: list[torch.Tensor] | None = None  # par couche
     n_seen = 0
-    for batch in loader:
+    n_batches_total = (n_examples + batch_size - 1) // batch_size
+    for i, batch in enumerate(loader):
         tokens = batch["tokens"]
+        print(
+            f"  [calib] batch {i+1}/{n_batches_total} shape={tuple(tokens.shape)} ; "
+            f"forward + capture attn…", flush=True
+        )
         qpos = find_query_positions(tokens, vocab.QUERY)
         dump = extractor.extract(
             tokens, qpos, batch["targets"], batch["omegas"], batch["deltas"], batch["entropies"]
@@ -169,11 +185,13 @@ def _calibrate_kl_baseline(
         if accumulators is None:
             accumulators = [a.clone() for a in dump.attn]
         else:
-            for i, a in enumerate(dump.attn):
+            for j, a in enumerate(dump.attn):
                 # taille variable possible si seq_len change ; on assume seq_len fixe
-                accumulators[i] += a
+                accumulators[j] += a
         n_seen += 1
+        del dump  # libérer le peak attention avant le batch suivant
     assert accumulators is not None
+    print(f"  [calib] {n_seen} batches accumulés, calcul moyenne + GlobalKLBaseline", flush=True)
     averaged = [a / max(n_seen, 1) for a in accumulators]
     return GlobalKLBaseline.from_attention_dumps(averaged)
 
