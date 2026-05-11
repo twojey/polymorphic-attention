@@ -40,6 +40,21 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 (matin) — Optim S_Spectral via multiprocessing.Pool partagé
+**#decision** Le re-run 2000-ex lancé hier soir a crashé à 06:31 (cause : `MLFLOW_TRACKING_URI` pas exportée par `launch_phase1b.sh`). Avant relance, deux fixes appliqués :
+1. **Launcher** : ajout `export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-http://localhost:5000}"` (foreground + nohup branch).
+2. **`compute_s_spectral`** : parallélisation eigvalsh via `multiprocessing.Pool` (pattern emprunté à `bench/spearman.py`). Un seul pool partagé pour les L=6 layers (pas un pool par layer → évite L forks). Workers init force BLAS=1 par defense in depth. Speedup mesuré sur cas test (2×8×200, K=64, 6 layers) : **2.03×** (3.00s → 1.48s) ; sur le vrai cas (batches 2000-ex, n_full ~937), gain attendu 2.5-3× car overhead fork mieux amorti.
+3. **Garde-fou conservé** : RuntimeError si BLAS multi-thread détecté au call de `compute_s_spectral` (couvre le cas où le launcher est bypassé).
+
+**Why** : 4 vCPUs sur le VPS, 1 seul utilisé en mode séquentiel single-thread BLAS. Le multiprocessing avec BLAS=1 par worker est le seul moyen safe d'utiliser les 4 cores sans réintroduire le deadlock.
+
+**How to apply** : `./OPS/env/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false` (le code parallèle est transparent — pas de nouveau flag).
+
+### 2026-05-11 — Force BLAS single-threaded pour éviter deadlock eigvalsh
+**#decision** Suite au deadlock 38h (2026-05-10 17:35→2026-05-11 06:22), les runs phase 1.5 lancés via `OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1` en mode blocking. Créé `OPS/env/launch_phase1b.sh` qui injecte ces vars systématiquement. Tout re-run phase 1.5+ DOIT passer par ce script ou setup_env.sh mis à jour.
+**Why** : deadlock reproductible et déterministe sur matrices rank-deficient grandes avec multi-thread BLAS.
+**How to apply** : `./OPS/env/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false`. Ou sourcer les vars avant un run manuel.
+
 ### 2026-05-10 — Bench phase 1.5 réduit (Δ ∈ [16,64]) pour contrainte mémoire VPS
 **#decision** Le run VPS a OOM à 9.4 GB sur 32 ex avec Δ jusqu'à 256 (seq_len ~4100). Réduction de structured_deltas à [16, 64] → seq max 1043 → mémoire ~1.5 GB/batch. **Pas une optimisation post-hoc**, c'est une contrainte hardware.
 **Why** : VPS a 9 GB RAM disponible vs pod ~120 GB. La réduction est nécessaire pour faire tourner phase 1.5 sans GPU.
@@ -103,6 +118,12 @@ Idem ci-dessus, redondant — à fusionner après le run.
 ---
 
 ## Surprises et pièges (chronologique inverse)
+
+### 2026-05-11 — Deadlock BLAS multi-thread dans compute_s_spectral eigvalsh
+**#bug** Run 2000-ex lancé 2026-05-10 17:35 s'est accroché pendant ~38h dans `torch.linalg.eigvalsh(M_reg)` (phase1b_calibration_signal/signals/s_spectral.py:98). Analyse stack: 6/9 threads en `futex_wait` (lock contention BLAS). Cause : OpenBLAS/MKL multi-thread avec plusieurs threads attendant une ressource partagée dans l'eigvalsh kernel.
+**Leçon** : PyTorch `linalg.eigvalsh()` sur matrices grandes (K=64, B*H*N=~100k batches) en parallèle OpenBLAS = deadlock déterministe si BLAS threads > 1.
+**Fix** : (1) Patcher `compute_s_spectral()` pour warning + logging par couche ; (2) créer `OPS/env/launch_phase1b.sh` qui force `OPENBLAS_NUM_THREADS=1` + `MKL_NUM_THREADS=1` + `OMP_NUM_THREADS=1` + `NUMEXPR_NUM_THREADS=1` ; (3) re-run avec env vars, fin estimée ~01:35 le 2026-05-11 matin.
+**À faire post-run** : tester si GPU SVD (device=cuda) est stable (cuSOLVER généralement n'a pas ce problème).
 
 ### 2026-05-10 — VPS OOM kill : capture_attn=True matérialise N²×6×8 simultanément
 **#bug** Sur VPS 9 GB RAM dispo, le forward Oracle avec capture_attn=True alloue les 6 layers × 8 heads × N² × FP64 simultanément (peak juste après forward). Pour N=4100 et batch=2 : 2×6×8×4100²×8 bytes ≈ 12 GB → OOM.

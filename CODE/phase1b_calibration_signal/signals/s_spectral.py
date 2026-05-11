@@ -13,7 +13,50 @@ Convention :
 
 from __future__ import annotations
 
+import os
+from multiprocessing import get_context
+
+import numpy as np
 import torch
+
+
+# === Workers multiprocessing pour eigvalsh parallélisé sur 4 cores ===
+# Pattern emprunté à bench/spearman.py : fork + variables globales en COW.
+# Chaque worker tourne avec OPENBLAS_NUM_THREADS=1 (hérité du parent + defense
+# in depth). 4 cores × 1 thread BLAS = 4× speedup sans risque de deadlock.
+
+_WORKER_M_REG: np.ndarray | None = None
+_WORKER_RIDGE: float = 1e-6
+_WORKER_TAU: float = 1e-3
+
+
+def _spectral_worker_init(m_reg: np.ndarray, ridge: float, tau: float) -> None:
+    global _WORKER_M_REG, _WORKER_RIDGE, _WORKER_TAU
+    _WORKER_M_REG = m_reg
+    _WORKER_RIDGE = ridge
+    _WORKER_TAU = tau
+    # Defense in depth (déjà hérité via fork normalement)
+    for v in ('OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        os.environ[v] = '1'
+
+
+def _spectral_worker_chunk(idx_range: tuple[int, int]) -> np.ndarray:
+    start, end = idx_range
+    assert _WORKER_M_REG is not None
+    M_chunk = torch.from_numpy(_WORKER_M_REG[start:end])
+    ev = torch.linalg.eigvalsh(M_chunk)
+    s2_desc = (ev.flip(-1) - _WORKER_RIDGE).clamp_min(0)
+    s_max2 = s2_desc[:, 0:1].clamp_min(1e-20)
+    return (s2_desc > (_WORKER_TAU * _WORKER_TAU) * s_max2).sum(dim=-1).numpy().astype(np.float64)
+
+
+def _spectral_worker_chunk_serial(m_reg: np.ndarray, ridge: float, tau: float) -> np.ndarray:
+    """Chemin séquentiel (utilisé quand le batch est trop petit pour amortir le pool)."""
+    M = torch.from_numpy(m_reg)
+    ev = torch.linalg.eigvalsh(M)
+    s2_desc = (ev.flip(-1) - ridge).clamp_min(0)
+    s_max2 = s2_desc[:, 0:1].clamp_min(1e-20)
+    return (s2_desc > (tau * tau) * s_max2).sum(dim=-1).numpy().astype(np.float64)
 
 
 def _r_eff(matrix: torch.Tensor, tau: float = 1e-3) -> int:
@@ -54,8 +97,21 @@ def compute_s_spectral(
     5. r_eff = (s > tau * s_max) per token.
 
     Coût : O(B*H*N * K² log K) en SVD batchée GPU vs L*B*H*N en Python pur V1.
+
+    **IMPORTANT** : Pour éviter deadlock BLAS multi-thread, requiert OPENBLAS_NUM_THREADS=1
+    ou MKL_NUM_THREADS=1. Cf. DOC/carnet 2026-05-11 bug deadlock eigvalsh.
     """
-    import torch.nn.functional as F
+    # Garde-fou : refuser de tourner si BLAS multi-thread (deadlock 38h reproductible
+    # sur eigvalsh batché grandes matrices rank-deficient — cf. carnet 2026-05-11).
+    _required_blas_vars = ('OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'OMP_NUM_THREADS', 'NUMEXPR_NUM_THREADS')
+    _bad = {v: os.environ.get(v) for v in _required_blas_vars if os.environ.get(v) != '1'}
+    if _bad:
+        raise RuntimeError(
+            f"BLAS multi-thread détecté ({_bad}). compute_s_spectral() refuse de tourner "
+            f"pour éviter le deadlock eigvalsh. Lance via OPS/env/launch_phase1b.sh ou exporte "
+            f"manuellement {'='.join(_required_blas_vars)}=1 avant l'import de torch. "
+            f"Voir DOC/carnet 2026-05-11."
+        )
 
     L = len(attn_per_layer)
     B, H, N, _ = attn_per_layer[0].shape
@@ -64,44 +120,54 @@ def compute_s_spectral(
     out = torch.zeros(L, B, H, N, dtype=torch.float64, device=device)
 
     if N < K:
-        # Pas assez de tokens pour une fenêtre complète, retourne zéros (warmup).
         return out
 
-    # Positions où on calcule la SVD : t ∈ [K-1, N-1] avec pas `stride`.
-    # Hors `stride` ou warmup (t < K-1), out reste à 0.
     ts = list(range(K - 1, N, stride))
     n_full = len(ts)
     if n_full == 0:
         return out
 
-    for ell, A_layer in enumerate(attn_per_layer):
-        # A_layer : (B, H, N, N). Stack des fenêtres causales aux positions ts.
+    # sched_getaffinity (vs cpu_count) respecte les cgroups : sur RunPod le
+    # container peut voir cpu_count=48 mais n'avoir que 32 cores assignés.
+    n_workers = max(1, len(os.sched_getaffinity(0)) - 1)
+    ridge = 1e-6
+    ts_tensor = torch.tensor(ts, device=device)
+    eye = torch.eye(K, dtype=torch.float32).unsqueeze(0)
+
+    # Phase 1 : compute M_reg pour tous les layers et accumuler (FP32).
+    # Coût mémoire : L * B * H * n_full * K * K * 4 bytes.
+    # Ex : 6 * 2 * 8 * 937 * 64² * 4 ≈ 1.5 GB pour un batch typique phase 1.5.
+    M_reg_per_layer: list[np.ndarray] = []
+    for A_layer in attn_per_layer:
         windows = torch.stack(
             [A_layer[:, :, t - K + 1 : t + 1, t - K + 1 : t + 1] for t in ts],
             dim=2,
         )  # (B, H, n_full, K, K)
-        windows_flat = windows.reshape(-1, K, K).contiguous()  # (B*H*n_full, K, K)
+        W = windows.reshape(-1, K, K).contiguous().float()
+        M = W @ W.transpose(-2, -1)
+        M_reg = (M + ridge * eye).contiguous()
+        M_reg_per_layer.append(M_reg.numpy())
 
-        # Stratégie : eigvalsh(W W.T + εI) au lieu de svdvals(W).
-        # Raison 1 : sur attention rank-deficient (concentration token),
-        #   cuSolver SVD fail à converger → fallback iterative très lent.
-        # Raison 2 : eigvalsh sans ridge fail aussi sur eigenvalues répétées
-        #   (matrices low-rank → plusieurs zéros). Ajout d'un ridge ε·I
-        #   (jitter) avant eigvalsh garantit la convergence ; soustrait
-        #   après pour précision sur σ².
-        # σ_i² = eigenvalue_i de (W W.T), donc σ_i = sqrt(λ_i).
-        W = windows_flat.float()
-        M = W @ W.transpose(-2, -1)             # (B*H*n_full, K, K) PSD
-        ridge = 1e-6
-        eye = torch.eye(K, device=M.device, dtype=M.dtype).expand_as(M[:1])
-        M_reg = M + ridge * eye                 # ridge regularisation
-        ev = torch.linalg.eigvalsh(M_reg)       # ascending, (B*H*n_full, K)
-        s2_desc = (ev.flip(-1) - ridge).clamp_min(0)   # σ² descending
-        s_max2 = s2_desc[:, 0:1].clamp_min(1e-20)
-        # r_eff = # σ_i > tau·σ_max ⇔ # σ_i² > tau²·σ_max²
-        r_eff = (s2_desc > (tau * tau) * s_max2).sum(dim=-1).to(torch.float64)
+    # Phase 2 : un seul pool.map sur le batch concaténé (évite L forks).
+    all_M_reg = np.concatenate(M_reg_per_layer, axis=0)
+    M_count = all_M_reg.shape[0]
+    chunk_size = max(1, (M_count + n_workers - 1) // n_workers)
+    chunks = [(i, min(i + chunk_size, M_count)) for i in range(0, M_count, chunk_size)]
 
-        # Place les valeurs aux positions exactes ts (pas au slice contigu)
-        out[ell, :, :, torch.tensor(ts, device=device)] = r_eff.reshape(B, H, n_full)
+    if len(chunks) <= 1:
+        r_eff_all = _spectral_worker_chunk_serial(all_M_reg, ridge, tau)
+    else:
+        ctx = get_context("fork")
+        with ctx.Pool(n_workers, initializer=_spectral_worker_init,
+                      initargs=(all_M_reg, ridge, tau)) as pool:
+            results = pool.map(_spectral_worker_chunk, chunks)
+        r_eff_all = np.concatenate(results)
+
+    # Phase 3 : reshape par layer et place dans out aux positions ts.
+    r_eff_all = r_eff_all.reshape(L, B, H, n_full)
+    for ell in range(L):
+        out[ell, :, :, ts_tensor] = torch.from_numpy(r_eff_all[ell]).to(
+            device=device, dtype=torch.float64
+        )
 
     return out
