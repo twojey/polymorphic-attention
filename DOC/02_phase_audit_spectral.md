@@ -32,6 +32,19 @@ Cast en **FP64** au moment de l'extraction (l'Oracle s'entraîne en BF16, mais l
 
 Les valeurs singulières (σ_k) portent l'énergie spectrale de la matrice d'attention. Leur décroissance traduit la **compressibilité** de A : décroissance rapide → A est essentiellement low-rank ; décroissance lente → A est diffuse.
 
+#### Infrastructure d'extraction (refactor 2026-05-11)
+
+Pour les seq_len cibles de phase 2 (jusqu'à 8192+), l'API d'extraction historique (`extract()` qui matérialise toutes les couches simultanément en FP64) est inadaptée. Le refactor expose trois APIs streaming dans `CODE/phase1_metrologie/oracle/extract.py` :
+
+- **`extract_per_layer(...)`** — générateur yield LayerDump couche par couche. Pic FP64 = 1 couche au lieu de L. À utiliser pour `svd_pipeline.py`, `head_specialization.py`.
+- **`extract_windowed_per_layer(..., K, stride)`** — fenêtres K×K diagonales. Pic FP64 = (B,H,K,K). À utiliser pour r_eff local (A1), stress-rank windowed (cf. §3 r_eff par fenêtre).
+- **`extract_streamed(..., callback)`** — variante callback pour compute streaming sans matérialiser la liste complète.
+
+Limites :
+- Le forward Oracle reste monolithique (toutes les attentions matérialisées dans buffers `.last_attn` pendant le forward). Pour seq_len > ~8192, refactor transformer.py avec hook per-layer requis (TODO post-phase 2).
+
+Cf. DOC/00b §II.8 pour le mapping API ↔ propriété catalogue A-W, et carnet 2026-05-11 14:30 UTC pour le contexte refactor.
+
 ## 3. Le rang effectif r_eff
 
 On définit le **rang effectif à seuil θ** comme le plus petit k qui capture une fraction θ de l'énergie spectrale (en énergie totale, pas seulement linéaire) :
