@@ -40,6 +40,34 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 10:40 UTC — Catalogue mathématique exhaustif Partie 1 + priorisation ASP
+**#decision #milestone** Suite demande utilisateur ("liste la plus exhaustive possible") + apport corpus théorique majeur (rang de déplacement Kailath/Pan, Ho-Kalman, H-matrices Hackbusch, Mercer/Bochner/RFF), création d'une **DOC nouvelle** :
+- **`DOC/00b_classification_proprietes.md`** : catalogue exhaustif (~50 propriétés sur 14 catégories A-N + 4 cadres théoriques O-R), avec définitions formelles, protocoles de test "boîte noire", indicateurs de stabilité/invariance, références bibliographiques (Kailath, Pan, Ho-Kalman, Hackbusch, Tyrtyshnikov, Mercer, Rahimi-Recht, etc.).
+
+**Catégories** :
+- A spectrales, B structurelles, C statistiques par token, D géométriques, E info-théoriques, F dynamiques
+- G algébriques, H cross-layer, I cross-head, J Markov, K topologiques, L fréquentielles
+- M conditionnelles à l'entrée, N comparatives Oracle/student
+- **O** rang de déplacement (Kailath/Pan), **P** réalisation d'état (Ho-Kalman), **Q** matrices hiérarchiques (Hackbusch), **R** noyau Mercer/RKHS
+
+**Priorisation pratique (estimation coût)** :
+- Tout en parallèle : ~50h dev + ~$30-50 compute. Trop pour V1.
+- **Phase prioritaire ASP** retenue : Sprints 1a/2/3a/5a + S_Grad dédié = ~25-35h dev + ~$10-20 compute. Items directement utiles à ASP (Partie 2) + étude structurelle minimale.
+- **Partie 1 enrichie** (Sprints 4/6/7) reportée après verdict ASP : ~25h dev + ~$15-30 compute.
+
+**Mises à jour cohérence** :
+- `DOC/00_vision.md` : préambule double-cadrage Partie 1/Partie 2.
+- `ROADMAP.md` : nouvelle section "Stage 1.5+ — Classification mathématique étendue (Partie 1 science)" avec Sprints détaillés.
+- Mémoire `project_question_framing.md` : référence vers DOC/00b.
+- Carnet (cette entrée).
+
+**Why ce travail** : Partie 1 = livrable scientifique réutilisable par toute la communauté ("classification + batterie de tests des attentions"). Sa valeur exige tests **exhaustifs**, pas partiels. Le corpus apporté par utilisateur (rang de déplacement, Ho-Kalman, H-matrices, Mercer) constitue le cadre théorique rigoureux qui distingue cette Partie 1 d'un simple "essai empirique".
+
+**How to apply** :
+- Court terme : compléter chaîne pod actuelle (Run 2 + Run 3 + Run 4) qui est un sous-ensemble de Sprint 2.
+- Moyen terme : lancer Sprints 1a/2/3a/5a + S_Grad sur sessions dev futures.
+- Long terme : Sprints 4/6/7 + multi-Oracle pour publication "Mathematical signature of attention operators".
+
 ### 2026-05-11 10:25 UTC — Roadmap "tests complets" Partie 1 — extension chaîne pod
 **#decision** Suite cadrage 10:15 (Partie 1 exige tests complets), planification roadmap pour compléter la classification scientifique.
 

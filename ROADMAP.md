@@ -337,6 +337,79 @@ Spec : [DOC/01b_phase_calibration_signal.md](DOC/01b_phase_calibration_signal.md
 
 ---
 
+## 🔬 Stage 1.5+ — Classification mathématique étendue (Partie 1 science)
+
+Spec : [DOC/00b_classification_proprietes.md](DOC/00b_classification_proprietes.md)
+
+> **Cadrage** : la phase 1.5 stricte teste 3 signaux candidats pour ASP (Partie 2). La classification étendue va plus loin : catalogue exhaustif (~50 propriétés sur 14 catégories A-N + 4 cadres théoriques O-R) constituant le **livrable Partie 1 — science fondamentale réutilisable**. Décision priorisation 2026-05-11 10:40 : **Phase prioritaire ASP d'abord** (Sprints 1a-5a, ~25-35h dev), Partie 1 enrichie ensuite (Sprints 4-7, ~25h dev).
+
+### Phase prioritaire ASP (~25-35h dev, ~$10-20 compute)
+
+#### 1c.1 — Sprint 1a : Tests boîte noire fondamentaux (priorité critique)
+- [ ] **G5** Test linéarité (probe x+y vs x, y) — distingue opérateur linéaire / non-linéaire
+- [ ] **O1** Test commutation Toeplitz (Z·A vs A·Z)
+- [ ] **P1, P2** Sonde rang Hankel global (paramètres de Markov + SVD)
+- [ ] **P3, P4** HSV + ordre minimal (théorème Ho-Kalman)
+- [ ] **R1** Test positivité Mercer (matrice Gram PSD)
+- 6-10h dev. Pose les fondations classification : linéaire / Toeplitz / Hankel-finite / Mercer.
+
+#### 1c.2 — Sprint 2 : Spectral + statistique
+- [ ] **A2-A6** spectre complet, conditionnement, décroissance, participation ratio
+- [ ] **C2-C5** S_KL uniform, entropies Shannon/Rényi, variance par tête
+- [ ] **A4** entropie spectrale par fenêtre (signal candidat ASP)
+- 3-5h dev. Réutilise infra phase 1.5 existante.
+
+#### 1c.3 — Sprint 3a : Algébrique + structurel partiel
+- [ ] **G1-G4** trace, déterminant, symétrie, idempotence, polynômes
+- [ ] **B1, B5, B6** Toeplitz-ness, block-diagonality, bandedness
+- [ ] **O2** rang de déplacement Cauchy-like
+- 4-6h dev.
+
+#### 1c.4 — Sprint 5a : Cross-layer + cross-head
+- [ ] **H1-H4** résidus inter-layers, compositions, évolution rang, convergence
+- [ ] **I1-I3** diversité, spécialisation, clustering heads
+- 5-8h dev. Essentiel pour comprendre la trajectoire que voit le Spectromètre.
+
+#### 1c.5 — Sprint S_Grad dédié
+- [ ] **C6** implémenter S_Grad calculation (mode train sur bench, ‖∇_x L‖)
+- [ ] Valider sur bench phase 1.5 → 3/3 signaux pour H2 complète
+- 3-5h dev. Comble le trou spec §8 piège 5.
+
+### 🚪 Go/no-go Phase prioritaire ASP
+- Au moins un signal candidat passe les seuils 0.70 / 0.20 → ASP viable, passer Stage 2.
+- Aucun signal ne passe → invalidation hypothèse polymorphique-via-allocation-guidée. Pivot possible vers autre approche sub-quadratique (kernel, state-space, etc.).
+
+### Partie 1 enrichie (~25h dev, ~$15-30 compute, après go/no-go)
+
+À planifier après le verdict de la phase prioritaire ASP. Items qui élargissent la classification scientifique sans servir directement à ASP :
+
+#### 1c.6 — Sprint 4 : Hiérarchique (H-matrix, HSS)
+- [ ] **Q1-Q6** admissibilité η, rang local, nestedness, transfert père-fils, stabilité
+- 8-12h dev. Library : scipy + ACA custom.
+
+#### 1c.7 — Sprint 6 : Markov + topo + freq + RFF
+- [ ] **J1-J4** Markov-ness, stationnaire, mixing time, réversibilité
+- [ ] **K1-K4** Laplacien, persistent homology, centralité, communautés
+- [ ] **L1-L3** FFT 2D, wavelets, quasi-périodicité
+- [ ] **R2-R7** Mercer décomposition, Bochner, RFF, ERC
+- 12-18h dev. Libraries : networkx, gudhi, pywavelets, numpy.fft.
+
+#### 1c.8 — Sprint 7 : Info-th + dyn + comparatives
+- [ ] **E1-E2** mutual info, compressibilité
+- [ ] **F1-F2** Lipschitzness, stabilité temporelle
+- [ ] **N1-N3** F-divergence Oracle/student, préservation distill, Lipschitz différentielle
+- 6-10h dev. Conditionnel à existence d'un student.
+
+### 1c.9 — Multi-Oracle (Sprint 4 RPC)
+- [ ] Réplication des tests sur autres Oracles (CIFAR, texte) → mesure universalité
+- Coût : multiplie compute, peu de dev.
+
+### 🚪 Go/no-go Partie 1 finale
+- Catalogue complet → publication "Mathematical signature of attention operators" (papier + library open source).
+- Item résiduel non couvert → flagué pour Sprint dédié futur.
+
+---
+
 ## 🚪 Stage 2 — Audit Spectral
 
 Spec : [DOC/02_phase_audit_spectral.md](DOC/02_phase_audit_spectral.md)

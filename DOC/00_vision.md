@@ -1,5 +1,13 @@
 # 00 — Vision
 
+> **Cadrage projet (clarifié 2026-05-11) — Deux livrables distincts** :
+>
+> **Partie 1 — Science fondamentale** : étude spectrale complète des propriétés mathématiques de l'attention, livrable une **classification + batterie de tests** réutilisable par toute la communauté. Catalogue exhaustif dans [DOC/00b_classification_proprietes.md](00b_classification_proprietes.md). Ne peut pas "fail" : chaque mesure (positive ou négative) enrichit la classification.
+>
+> **Partie 2 — Validation hypothèse polymorphique (ASP)** : appliquer les résultats Partie 1 pour vérifier si l'**attention sub-quadratique via allocation dynamique guidée par signal observable** est viable. Une approche parmi d'autres pour atteindre la sub-quadraticité (autres : kernel approx, sparse, low-rank, state-space). Conditionnée à la classification Partie 1.
+>
+> Le reste de ce document (sections 0-5) décrit principalement la **Partie 2** (ASP). La Partie 1 est le contexte scientifique plus large dans lequel s'inscrit ASP.
+
 ## 0. Scope — ce que le projet étudie, et ce qu'il ne touche pas
 
 Le projet étudie l'**attention** comme sous-module du Transformer. Toutes les analyses (SVD, r_eff, SCH, dictionnaire structurel) portent sur la matrice d'attention A et l'opérateur qui la calcule.
