@@ -40,6 +40,25 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 11:00 UTC — Pré-enregistrement des paris a priori (DOC/00c)
+**#decision #methodology** Avant exécution de la batterie classification (DOC/00b), pré-enregistrement des intuitions/paris sur ce que devraient donner les tests pour 8 Oracles classiques d'attention :
+- DT (Dense Transformer), LA (Linear Attention), PF (Performer), LF (Linformer), MB (Mamba/SSM), HY (Hyena), BB (BigBird), RF (Reformer)
+
+7 tableaux de paris (~70 cellules discriminantes total) couvrant catégories G (algébrique), A (spectral), B+O (structurel + rang de déplacement), P+Q (Ho-Kalman + hiérarchique), R (Mercer/RKHS), H+I+F (cross-layer/head/dynamique), J+T+U (Markov/équivariance/butterfly).
+
+**Fichier** : `DOC/00c_predictions_signatures.md`. Date d'enregistrement : 2026-05-11 ~11:00.
+
+**Why méthodologique** : ces paris constituent un **prior falsifiable** au sens fort. Pour chaque (Oracle, propriété), le pari est NET (✅/🔴/❓ avec justification). Quand la batterie sera exécutée, on confronte mesure réelle vs pari → score de prédiction par catégorie. Score faible = soit l'état de l'art théorique est mal compris, soit les architectures sont implémentées différemment de leur spec (les 2 sont publiables).
+
+**Patterns identifiés a priori** :
+- Tests discriminants (1 OUI/NON suffit à classer) : G5 linéarité (sépare SSM/conv des autres), R1 Mercer (sépare LA/PF des autres), B1/O1 Toeplitz (isole HY), low-rank global (isole LF), sparsité (sépare BB/RF des denses).
+- Tests à fort gain d'information (incertitude maximale) : Q4 nestedness, H3 évolution rang cross-layer, K (TDA), L (wavelets).
+
+**How to apply** :
+- NE PAS modifier 00c post-hoc en fonction des résultats. Toute modif doit être horodatée.
+- Ajouter section "Confrontation aux résultats" en bas de 00c une fois batterie exécutée.
+- Score de prédiction sera un **livrable mesurable** de la Partie 1.
+
 ### 2026-05-11 10:40 UTC — Catalogue mathématique exhaustif Partie 1 + priorisation ASP
 **#decision #milestone** Suite demande utilisateur ("liste la plus exhaustive possible") + apport corpus théorique majeur (rang de déplacement Kailath/Pan, Ho-Kalman, H-matrices Hackbusch, Mercer/Bochner/RFF), création d'une **DOC nouvelle** :
 - **`DOC/00b_classification_proprietes.md`** : catalogue exhaustif (~50 propriétés sur 14 catégories A-N + 4 cadres théoriques O-R), avec définitions formelles, protocoles de test "boîte noire", indicateurs de stabilité/invariance, références bibliographiques (Kailath, Pan, Ho-Kalman, Hackbusch, Tyrtyshnikov, Mercer, Rahimi-Recht, etc.).
