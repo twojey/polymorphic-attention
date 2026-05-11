@@ -110,13 +110,29 @@ def _load_oracle(
 
 
 def _calibrate_kl_baseline(
-    oracle: OracleTransformer, vocab: Vocab, *, n_examples: int, seed: int, batch_size: int = 16
+    oracle: OracleTransformer, vocab: Vocab, *, n_examples: int, seed: int,
+    omega_max: int = 0, delta_max: int = 0, batch_size: int = 16,
 ) -> GlobalKLBaseline:
-    """Calibre le baseline KL sur séquences sans structure (ω=0, Δ=0, ℋ étalée)."""
-    cfg = StructureMNISTConfig(
-        omega=0, delta=0, entropy=0.5, n_examples=n_examples,
-        n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
-    )
+    """Calibre le baseline KL sur séquences-bruit.
+
+    Si bench seq_len variable (omega_max/delta_max > 0), on génère le bruit
+    à seq_len max (formule SSG : 1 + (2+2δ)·ω + 1 + δ + 1) avec entropy=1.0
+    (bruit pur, ℋ saturée). À l'usage, compute_s_kl slice la baseline au
+    seq_len du batch + renormalise. Cf. carnet 2026-05-11 décision option C.
+
+    Si omega_max=0 et delta_max=0 (défaut historique), on reste sur ω=0, Δ=0,
+    entropy=0.5 (comportement V1 pour bench à seq_len fixe).
+    """
+    if omega_max > 0 or delta_max > 0:
+        cfg = StructureMNISTConfig(
+            omega=omega_max, delta=delta_max, entropy=1.0, n_examples=n_examples,
+            n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
+        )
+    else:
+        cfg = StructureMNISTConfig(
+            omega=0, delta=0, entropy=0.5, n_examples=n_examples,
+            n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
+        )
     ds = StructureMNISTDataset(cfg)
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=_make_padded_collate(vocab.PAD))
 
@@ -266,22 +282,27 @@ def main(cfg: DictConfig) -> None:
         print(f"Oracle chargé depuis {oracle_checkpoint} sur device {device}", flush=True)
 
         # --- Calibration baseline (uniquement si S_KL activé) ---
-        # NB V1 : S_KL nécessite que la calibration et le bench utilisent le
-        # même seq_len, sinon les distributions ne broadcast pas. Pour V1
-        # avec bench à seq_len variable, on désactive S_KL par défaut.
-        # Activable via override : s_kl.enabled=true (et fixer bench.seq_len).
+        # Adaptation seq_len variable (carnet 2026-05-11 option C) : la baseline
+        # est calibrée à seq_len max (ω_max, δ_max du bench, entropy=1.0 = bruit
+        # pur). compute_s_kl slice + renormalise à seq_len du batch.
         enable_s_kl = bool(OmegaConf.select(cfg, "s_kl.enabled", default=False))
         enable_s_spectral = bool(OmegaConf.select(cfg, "s_spectral.enabled", default=True))
         baseline = None
         if enable_s_kl:
+            omega_max = max(cfg.bench.structured_omegas) if cfg.bench.structured_omegas else 0
+            delta_max = max(cfg.bench.structured_deltas) if cfg.bench.structured_deltas else 0
             baseline = _calibrate_kl_baseline(
                 oracle, vocab,
                 n_examples=cfg.s_kl.baseline.n_calibration_examples,
                 seed=cfg.s_kl.baseline.seed,
+                omega_max=omega_max, delta_max=delta_max,
             )
-            print(f"Baseline KL calibrée sur {cfg.s_kl.baseline.n_calibration_examples} exemples", flush=True)
+            print(
+                f"Baseline KL calibrée sur {cfg.s_kl.baseline.n_calibration_examples} exemples "
+                f"(ω_max={omega_max}, δ_max={delta_max}, entropy=1.0)", flush=True
+            )
         else:
-            print("S_KL désactivé pour ce run (seq_len variable). Seul S_Spectral sera évalué.", flush=True)
+            print("S_KL désactivé pour ce run (s_kl.enabled=false).", flush=True)
 
         # --- Banc hybride ---
         bench_cfg = HybridBenchConfig(

@@ -72,17 +72,33 @@ def compute_s_kl(
 
     `attn_per_layer` : liste de L tensors (B, H, N, N) FP64.
     Retourne (L, B, H, N) FP64.
+
+    Adaptation seq_len variable (cf. carnet 2026-05-11 décision option C) :
+    si N (seq_len du batch) < baseline_N (seq_len de la calibration),
+    on slice baseline[..., :N] et on renormalise pour somme=1. Mathématiquement
+    valide car la baseline est une mesure de probabilité marginale sur les
+    positions causales ; sa restriction aux N premières positions, renormalisée,
+    reste une distribution de probabilité.
+    Pré-condition : baseline doit être calibrée à seq_len ≥ max(seq_len) du bench.
     """
     L = len(attn_per_layer)
     B, H, N, _ = attn_per_layer[0].shape
     device = attn_per_layer[0].device
 
+    baseline_N = baseline.baseline.shape[-1]
+    if N > baseline_N:
+        raise ValueError(
+            f"seq_len batch ({N}) > baseline seq_len ({baseline_N}). "
+            f"Calibrer baseline avec ω_max, δ_max ≥ ceux du bench."
+        )
+
     out = torch.zeros(L, B, H, N, dtype=torch.float64, device=device)
     for ell, A_layer in enumerate(attn_per_layer):
-        # A_layer : (B, H, N, N). Pour chaque token t, p_t = A_layer[..., t, :].
-        # baseline.baseline[ell] : (H, N), broadcast sur batch et token.
-        baseline_dist = baseline.baseline[ell].to(A_layer.device)  # (H, N)
-        # Reshape pour broadcast avec p (B, H, N, N) → q (1, H, 1, N)
+        baseline_dist = baseline.baseline[ell].to(A_layer.device)  # (H, baseline_N)
+        if N < baseline_N:
+            # Slice + renormalize pour conserver la propriété de distribution.
+            baseline_dist = baseline_dist[:, :N]                              # (H, N)
+            baseline_dist = baseline_dist / baseline_dist.sum(dim=-1, keepdim=True).clamp_min(1e-12)
         q = baseline_dist.unsqueeze(0).unsqueeze(2)  # (1, H, 1, N)
         out[ell] = _kl_divergence(A_layer, q)
     return out

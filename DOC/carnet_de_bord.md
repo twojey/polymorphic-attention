@@ -40,6 +40,30 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 09:25 UTC — Adaptation S_KL au seq_len variable (option C)
+**#decision** Pivot pod CPU RunPod (32 vCPU, 251 GB RAM) lancé ce matin pour relancer phase 1.5 avec speedup ~10× vs VPS. Trois runs planifiés en séquence sur le pod :
+- **Run 1** (08:31→09:14, terminé) : Δ∈[16,64], `s_kl.enabled=false`. Verdict **NO-GO** (MLflow `5e5ead1e`).
+- **Run 2** (09:14 → en cours) : Δ∈[16,64,256], `s_kl.enabled=false`. Bench original.
+- **Run 3** (à lancer après Run 2) : Δ∈[16,64,256], **`s_kl.enabled=true`** (option C — code adapté).
+
+**Découverte méthodologique** (~09:20) : ai laissé `s_kl.enabled=false` sur les Runs 1+2 par copier-coller de la commande du carnet, sans repenser le contexte du pivot pod. Or H2 demande "**au moins un** signal parmi {S_KL, S_Grad, S_Spectral}" — Runs 1+2 testent seulement 2/3 signaux. Trou méthodo identifié **avant** la fin de Run 2 (résultat encore inconnu).
+
+**Cause technique S_KL × seq_len variable** : la baseline KL est précalculée sur seq_len fixe (formule SSG : `seq_len = 1 + (2+2δ)·ω + 1 + δ + 1`, dépend de ω ET Δ). Bench phase 1.5 fait varier les deux → baseline ne broadcast pas. C'était pourquoi le code refusait `s_kl.enabled=true`.
+
+**Option C choisie** (vs B = mini-runs par bucket, D = conclure avec trou) :
+- Adapter `compute_s_kl` pour slice baseline à seq_len batch + renormaliser (mathématiquement valide : restriction d'une distribution de probabilité aux N premières positions, renormalisée, reste une distribution).
+- Calibrer la baseline à seq_len max (ω_max, δ_max du bench, `entropy=1.0` = bruit pur) au lieu de seq_len=3 (ω=0, δ=0) d'origine.
+
+**Why** : C est plus propre scientifiquement que B (pas d'agrégation manuelle de mini-runs) et plus complet que D. Modifie le protocole pré-enregistré → à documenter rigoureusement. Décision prise **avant** la fin de Run 2 → pas d'ajustement post-hoc en fonction des résultats.
+
+**Fichiers modifiés** :
+- `CODE/phase1b_calibration_signal/signals/s_kl.py` : `compute_s_kl` slice + renorm + raise si N > baseline_N.
+- `CODE/phase1b_calibration_signal/run.py` : `_calibrate_kl_baseline` accepte `omega_max`, `delta_max`. Main passe `max(cfg.bench.structured_omegas)`, `max(cfg.bench.structured_deltas)`. Message "S_KL désactivé" reformulé (plus de mention seq_len variable, c'est résolu).
+
+**Test unitaire validé** (avant déploiement) : 3 cas (N=baseline OK, N<baseline slice+renorm OK, N>baseline raise OK).
+
+**How to apply** : `./OPS/env/launch_phase1b.sh -- bench.n_examples=2000 s_kl.enabled=true bench.structured_deltas=[16,64,256]`. Wrapper Run 3 sur le pod : `/root/run3_skl.sh`.
+
 ### 2026-05-11 (matin) — Optim S_Spectral via multiprocessing.Pool partagé
 **#decision** Le re-run 2000-ex lancé hier soir a crashé à 06:31 (cause : `MLFLOW_TRACKING_URI` pas exportée par `launch_phase1b.sh`). Avant relance, deux fixes appliqués :
 1. **Launcher** : ajout `export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-http://localhost:5000}"` (foreground + nohup branch).
