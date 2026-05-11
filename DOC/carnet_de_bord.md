@@ -40,6 +40,47 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 ~17:00 UTC — Phase 2 driver : support multi-dump + fix hygiène OPENBLAS
+
+**#decision #infra** Après refactor V2 phase 1 (entrée précédente), le driver phase 2 n'acceptait qu'**un seul** fichier `.pt` via `attention_dump_path`. Mais le V2 produit ~11 fichiers `audit_dump_seq{N}.pt` (un par bucket seq_len) pour permettre `min_portion` formel par régime. Mismatch d'interface bloquant.
+
+**Refactor phase 2** (`CODE/phase2_audit_spectral/run.py`) :
+- Helper `_load_dumps(dump_path, dump_dir, dumps_glob)` extrait du `main()`. Deux modes mutuellement exclusifs :
+  - **Mode A** (legacy) : `attention_dump_path=PATH` → un seul `.pt`
+  - **Mode B** (V2) : `attention_dump_dir=PATH` → tous les fichiers matchant `dumps_glob` (défaut `audit_dump_seq*.pt`)
+- Tri **numérique** sur le seq_len extrait du nom (vs tri lex) — ordre humain naturel `[11, 87, 291]` au lieu de `[11, 291, 87]`.
+- Helper `_validate_dumps` : vérifie l'invariant cross-bucket (même `L`, même `H`, sinon ce ne sont pas des dumps du même Oracle).
+- Pipeline interne adapté :
+  - **SVD batchée** : itère bucket par bucket (chaque bucket a `N` uniforme → SVD batchée respecte la dim). Accumule dans `r_eff_per_layer_head_example` shape `(L, B_total, H)`.
+  - **Concaténation des axes scalaires** : `omegas`/`deltas`/`entropies` concatenés dans l'axe batch (tous shape `(B_total,)`).
+  - **Batteries A/B/D** : itère sur tous les dumps pour remplir `A_per_regime[(ell, ω, Δ)]`. Pas de conflit cross-bucket car un même régime `(ω, Δ)` n'existe que dans un seul bucket (les seq_len sont disjoints par construction).
+- Config `OPS/configs/phase2/audit.yaml` : 3 champs ajoutés (`attention_dump_path`, `attention_dump_dir`, `dumps_glob`), tous `null` par défaut.
+- MLflow loggue désormais `n_dumps`, `seq_lens`, `n_examples_total` en params (traçabilité multi-bucket).
+
+**Décision architecturale** : on n'a **pas** consolidé les dumps en un seul `.pt`. Garder N variable par bucket préserve l'invariant SVD (`(B, H, N, N)` avec N constant intra-batch). Une consolidation forcerait soit du padding (gaspille la mémoire FP64 ~ ω·Δ_max/ω·Δ_typ), soit un dtype hétérogène (cassé pour SVD batchée). Le pipeline phase 2 n'utilise jamais N comme dim alignée cross-bucket — les outputs sont indexés par exemple ou par régime — donc itérer par bucket coûte zéro en complexité.
+
+**Tests** (`tests/test_run_multidump.py`, 9 cas) :
+- Validation args : ni l'un ni l'autre → exit, les deux → exit, glob personnalisé respecté.
+- Single file (mode A) : 1 dump retourné, shape préservée.
+- Directory (mode B) : tri numérique vérifié sur `[11, 87, 291]` (test de régression du tri lex).
+- Empty directory → exit explicite.
+- `_validate_dumps` : rejette mismatch `L` ou `H` cross-bucket.
+
+Phase 2 : **26/26 tests passent** (17 existants + 9 nouveaux). Aucune régression sur les batteries A/B/D, SVD pipeline, transfer law.
+
+**Bonus — fix hygiène OPENBLAS** (`CODE/phase1b_calibration_signal/tests/conftest.py`, nouveau fichier) :
+- `test_s_spectral_uniform_attention_low_rank` échouait en environnement local (vars BLAS non setées) parce que `compute_s_spectral` a un check runtime qui exige `OPENBLAS_NUM_THREADS=MKL_NUM_THREADS=OMP_NUM_THREADS=NUMEXPR_NUM_THREADS=1` (protection contre le deadlock eigvalsh documenté 2026-05-11).
+- Fix : fixture pytest `autouse` qui set ces 4 vars via `monkeypatch.setenv`. Le check runtime côté production **reste en place** — il protège les vrais runs, on patch juste l'env de test.
+
+**État global tests projet** : **152/152 tests passent**.
+
+**Status post-refactor pour enchaîner phase 2 quand Run 3 GO** :
+- ✅ V2 driver phase 1 (entrée précédente)
+- ✅ Phase 2 driver multi-dump
+- ✅ Checkpoint Oracle e2f0b5e disponible localement
+- ⚠️ Pod RTX 5090 à re-louer (Run 3 tourne sur pod CPU)
+- ⚠️ V2 jamais exécuté sur vraies données → smoke run nécessaire (~30 min) avant le full run (~1-2 h estimé)
+
 ### 2026-05-11 ~16:30 UTC — V2 driver phase 1 (run_extract.py) : debug + tests pytest
 
 **#decision #infra** Le squelette V2 (`CODE/phase1_metrologie/run_extract.py`, ~419 lignes, untracked) écrit en préparation phase 2 avait quatre bugs bloquants. Audit + fix + suite pytest (12 tests, passe) en une passe pendant que Run 3 tourne.

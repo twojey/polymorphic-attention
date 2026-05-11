@@ -9,6 +9,14 @@ domain: smnist
 sprint: 2
 seed: 1000
 
+# --- Source des dumps phase 1 (mutuellement exclusifs) ---
+# Mode A : un seul .pt (legacy V1 ou bucket unique)
+attention_dump_path: null
+# Mode B : dossier produit par run_extract.py V2 phase 1 (multi-bucket)
+attention_dump_dir: null
+# Glob appliqué à attention_dump_dir (ne sert pas en mode A)
+dumps_glob: "audit_dump_seq*.pt"
+
 # --- SVD ---
 theta: 0.99    # r_eff(θ) cible. ε_target sur A pré-enregistré.
 
