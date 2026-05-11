@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **partiel — NO-GO Run 1 (S_KL off)** : pod CPU 2026-05-11, bench réduit Δ≤64 sur 2000 ex → NO-GO confirmé sur S_Spectral+S_Grad (MLflow `5e5ead1e`). Run 2 (Δ étendu, S_KL off) et Run 3 (Δ étendu, S_KL adapté) en queue sur pod. Verdict H2 complet : après Run 3. |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **V1 : test S_Spectral seul** (option STRICTE 2026-05-11 09:55). S_Grad exclu (§8 piège 5 anticipe). S_KL reporté Sprint dédié. Run 1 NO-GO sur Δ≤64 (MLflow `5e5ead1e`, ρ_Δ=0.7043 ✅, ρ_ℋ=0.2453 ❌). Run 2 (S_Spectral sur Δ∈[16,64,256]) en cours sur pod, fin ~10:45-11:45. **Verdict V1 = celui de Run 2.** Sprint S_KL/S_Grad : à cadrer si NO-GO Run 2. |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
