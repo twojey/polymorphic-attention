@@ -277,6 +277,75 @@ Lien complexité : H-matrix O(Nk log N), H²/HSS **O(Nk)**.
 
 Lien complexité : K tronquable à D ≪ N → O(ND) au lieu de O(N²).
 
+### S — Décompositions tensorielles structurées
+
+Pour A vu comme tenseur d'ordre supérieur (par ex. (L, H, N, N)) ou via reshapes de matrices N×N en tenseurs.
+
+| ID | Nom | Définition | Test invariant |
+|---|---|---|---|
+| S1 | **Tucker decomposition** | rangs multilinéaires (r_1, ..., r_d) faibles | invariants de Tucker |
+| S2 | **Tensor Train (TT)** | rangs TT bornés (Oseledets 2011) | TT-rank invariant base |
+| S3 | **Hierarchical Tucker (HT)** | profondeur d'arborescence + rangs feuilles | invariant arbre canonique |
+| S4 | **Tensor Network (MERA, PEPS)** | réseau de tenseurs avec rangs locaux faibles | invariants topologiques |
+| S5 | **CANDECOMP/PARAFAC (CP)** | rang CP minimal (Kruskal) | rang CP NP-hard exact |
+
+Lien complexité : TT-rank r borné → produit MV en O(r² N log N). HT en O(rN). Très efficace pour tenseurs d'ordre élevé.
+
+### T — Équivariances par groupe / symétries
+
+Une matrice T équivariante sous un groupe G satisfait T·ρ(g) = ρ(g)·T pour tout g ∈ G (où ρ est une représentation).
+
+| ID | Nom | Définition | Test invariant |
+|---|---|---|---|
+| T1 | **G-équivariance** générale | commutation avec ρ(g) pour groupe G donné (cyclique, dihédral, symétrique S_n, ...) | invariant action de G |
+| T2 | **Permutation-invariance** | T·P = P·T pour permutations P (cas G = S_n) | matrices doublement stochastiques + structure |
+| T3 | **Matrices circulantes** (cas G = C_n) | équivariance translation cyclique → diagonalisable par DFT | spectres = DFT |
+| T4 | **Block-circulantes** (cas G produit) | circularité par blocs → BlockDFT | rangs équivariants |
+| T5 | **Algèbre de groupe** | T appartient à C[G] / fonction sur G | dimension ≤ |G| |
+| T6 | **Matrices invariantes par rotation** (SO(d)) | applications via tenseurs sphériques | rangs harmonique |
+
+Lien complexité : G-équivariance avec |G| = m → O(m²) paramètres → O(m·N log N) via diagonalisation par caractères. Cas circulant : O(N log N) via FFT.
+
+### U — Sparse-structurées (butterfly, Monarch)
+
+Matrices issues du croisement structure + sparsité. Fondement des transformées rapides modernes (FFT, Hadamard, etc.) et des architectures Dao et al. (Pixelfly, Monarch).
+
+| ID | Nom | Définition | Test invariant |
+|---|---|---|---|
+| U1 | **Butterfly** (Cooley-Tukey) | factorisation en log N matrices sparse permutées (FFT) | structure de récurrence |
+| U2 | **Monarch** (Dao 2022) | produit de deux block-diagonales avec permutation | rangs blocs faibles |
+| U3 | **Pixelfly / BFLY** (Chen 2021) | sparsité fixe en motif butterfly | motif fixe paramétré |
+| U4 | **Block-sparse** | sparsité par blocs (motifs locaux + globaux) | longueur des connections |
+| U5 | **Random sparse + low-rank** (Reformer-like) | LSH + sparse attention | qualité approximation LSH |
+
+Lien complexité : Butterfly → O(N log N), Monarch → O(N√N) ou O(N log N) selon profondeur. Toutes admettent un produit MV linéaire en N pour une qualité fixée.
+
+### V — Opérateurs analytiques / pseudo-différentiels
+
+Cadre fonctionnel-analyste : T comme opérateur intégral avec noyau analytique.
+
+| ID | Nom | Définition | Test invariant |
+|---|---|---|---|
+| V1 | **Opérateurs pseudo-différentiels** (Hörmander, Weyl) | symbol calculus, classes S^m_{ρ,δ} | classe symbol |
+| V2 | **Calderon-Zygmund operators** | intégrales singulières, kernel ∈ CZ(α) | régularité Hölder noyau |
+| V3 | **Opérateurs intégraux compacts** | Hilbert-Schmidt (Σλ_i² < ∞) ou trace-class (Σ\|λ_i\| < ∞) | classes Schatten |
+| V4 | **Matrices résultantes / Sylvester / Bezout** | provenant de polynômes algébriques | rangs algébriques |
+| V5 | **Matrices de Wishart** (statistiques) | M = X X^T / n, X ∼ Gaussian | spectre Marchenko-Pastur |
+| V6 | **Matrices à noyau analytique** | T_{ij} = K(x_i, x_j) avec K analytique → décroissance exponentielle σ_i | rate exponentielle |
+
+Lien complexité : opérateurs CZ → précondition pour FMM (Fast Multipole Method) en O(N log N) ou O(N). Compacts → décroissance λ_i contrôle compression.
+
+---
+
+**Récap classes A-V (couverture quasi-exhaustive de l'état de l'art mathématique sur opérateurs structurés)** :
+- **Linéaires-dépendantes-d'input** : A, C, D, F, M (mesures par évaluation)
+- **Linéaires structurelles "matrix view"** : B, G, O, P, Q, R, S, T, U, V (théorie matrices/tenseurs/groupes)
+- **Cross-axes** (layers/heads) : H, I
+- **Statistico-stochastiques** : E, J, K, L
+- **Comparatives** : N
+
+C'est l'horizon de la connaissance mathématique actuelle sur les opérateurs structurés. Si **aucun** invariant de A-V n'est satisfait par un Oracle, l'opérateur n'appartient à aucune classe théorisée connue → soit O(N²) intrinsèquement, soit nouvelle classe à théoriser (publication mathématique potentielle).
+
 ---
 
 ## III. Protocoles de test "boîte noire"

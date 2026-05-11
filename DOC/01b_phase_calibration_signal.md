@@ -1,10 +1,12 @@
 # 01b — Phase 1.5 : Calibration de l'Indicateur de Stress
 
-**Identification Gate.** Cette phase intercalaire entre la métrologie (phase 1) et l'audit spectral (phase 2) répond à *la* question dont dépend tout le projet : existe-t-il un signal observable token par token qui corrèle avec le stress structurel **et** reste insensible au bruit pur ?
+> **Cadrage** (clarifié 2026-05-11) : cette phase fait partie de la **Partie 2 — Validation hypothèse polymorphique (ASP)**. Elle teste 3 signaux candidats spécifiques (S_KL, S_Grad, S_Spectral) qui sont un **sous-ensemble** du catalogue exhaustif de la **Partie 1 — Science fondamentale** ([00b_classification_proprietes.md](00b_classification_proprietes.md), catégories A1, B2, C1, C6). Un échec ici n'invalide pas le projet sub-quadratique au sens large : il ferme la voie ASP-via-allocation-dynamique mais d'autres approches restent ouvertes (kernel approx, sparse, low-rank, state-space). Cf. également ROADMAP.md "Stage 1.5+ — Classification mathématique étendue".
 
-Si la réponse est non, le Spectromètre (phase 4) ne peut pas exister. La construction de l'ASPLayer (phase 3) elle-même devient sans objet : on aurait une architecture capable d'allouer dynamiquement du rang, mais aucun signal pour piloter cette allocation. Le projet s'arrête.
+**Identification Gate (Partie 2).** Cette phase intercalaire entre la métrologie (phase 1) et l'audit spectral (phase 2) répond à *la* question dont dépend la suite **du protocole ASP** : existe-t-il un signal observable token par token qui corrèle avec le stress structurel **et** reste insensible au bruit pur ?
 
-C'est pourquoi cette phase est un **gate** : aucun signal validé → aucun passage en phase 2.
+Si la réponse est non, le Spectromètre (phase 4) ne peut pas exister. La construction de l'ASPLayer (phase 3) elle-même devient sans objet : on aurait une architecture capable d'allouer dynamiquement du rang, mais aucun signal pour piloter cette allocation. **La voie ASP s'arrête** (mais pas le projet sub-quadratique global — pivot possible vers d'autres approches).
+
+C'est pourquoi cette phase est un **gate de la Partie 2** : aucun signal validé → aucun passage en phase 2 ASP.
 
 ## 1. Le trio de candidats
 

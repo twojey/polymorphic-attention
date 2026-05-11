@@ -24,6 +24,24 @@ Termes algébriques, architecturaux et protocolaires utilisés dans le projet AS
 
 **Entropie spectrale** — pour (σ_k), p_k = σ_k² / Σ_j σ_j², H = − Σ_k p_k log p_k. Mesure la dispersion de l'énergie sur les modes.
 
+**Théorème de Ho-Kalman** — un système LTI a une réalisation d'état de dimension finie ssi le rang de sa matrice de Hankel des paramètres de Markov est fini. Ce rang = ordre minimal du système. Fournit les bornes inférieures de complexité pour récursification.
+
+**HSV (Hankel Singular Values)** — valeurs singulières de la matrice de Hankel d'un système LTI. Invariants globaux indépendants de la base de réalisation. Leur décroissance contrôle la compressibilité.
+
+**H-matrix / H²-matrix / HSS** (Hackbusch) — formats de matrices hiérarchiques avec rang faible par blocs. H-matrix : O(Nk log N). H²-matrix / HSS : O(Nk) grâce à la **nestedness** (emboîtement des bases parent-fils). Voir [00b §I.2 (3)](00b_classification_proprietes.md).
+
+**Nestedness** — propriété d'une matrice hiérarchique où la base d'un cluster parent peut être exprimée à partir des bases de ses enfants via une matrice de transfert de petite taille. Clé du O(N) strict pour H²/HSS.
+
+**Théorème de Mercer** — un noyau continu, symétrique, défini positif K(x,y) admet une décomposition K(x,y) = Σ λ_i φ_i(x) φ_i(y) en série convergente. Si tronquable à D ≪ N termes, opérateur en O(ND).
+
+**Théorème de Bochner** — un noyau stationnaire K(x-y) est défini positif ssi sa transformée de Fourier est une mesure positive. Justifie l'approximation par Random Fourier Features.
+
+**Random Fourier Features (RFF)** — Rahimi-Recht 2007. Pour un noyau stationnaire K(x-y), échantillonner ω_j selon la densité spectrale μ et construire φ_j(x) = e^{iω_j^T x}. Donne K̃(x,y) = (1/D) Σ φ_j(x) φ_j(y)* avec erreur sup ∼ O(1/√D). Permet kernel approx en O(ND).
+
+**Tensor Train (TT)** (Oseledets 2011) — décomposition d'un tenseur d'ordre élevé en chaîne de tenseurs d'ordre 3 avec rangs TT bornés. Stockage en O(d N r²), produit MV en O(r² N log N).
+
+**Butterfly / Monarch** — matrices sparse-structurées admettant un produit MV en O(N log N) ou O(N√N). Fondement des transformées rapides (FFT, Hadamard) et des architectures Dao et al. 2022.
+
 ## Architectures séquentielles
 
 **SSM (State Space Model)** — modèle à récurrence linéaire h_t = A h_{t-1} + B x_t, y_t = C h_t + D x_t. Coût O(N) en inférence, capacité bornée par la dimension d'état.

@@ -1,6 +1,8 @@
 # Falsifiabilité — critères go/no-go par phase
 
-Tableau de synthèse. Chaque ligne décrit une hypothèse, le test qui la confronte, et la condition d'échec qui interromprait le protocole. Aucun ajustement post-hoc des seuils n'est admis.
+> **Cadrage** (clarifié 2026-05-11) : ces critères concernent la **Partie 2 — Validation hypothèse polymorphique (ASP)**. La **Partie 1 — Science fondamentale** ([00b_classification_proprietes.md](00b_classification_proprietes.md)) a une logique différente : elle **ne peut pas "fail"**, chaque mesure (positive ou négative) enrichit la classification. La condition d'échec d'une phase Partie 2 = invalidation de l'hypothèse polymorphique dans cette direction, mais reste une donnée valide pour la classification Partie 1 et n'invalide pas le projet sub-quadratique au sens large.
+
+Tableau de synthèse. Chaque ligne décrit une hypothèse, le test qui la confronte, et la condition d'échec qui interromprait le protocole **ASP**. Aucun ajustement post-hoc des seuils n'est admis.
 
 ## Synthèse
 
