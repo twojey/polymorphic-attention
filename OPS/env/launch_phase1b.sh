@@ -83,6 +83,8 @@ CHECKPOINT_PATH="${CHECKPOINT_PATH:-$CHECKPOINT_PATH_DEFAULT}"
 
 # --- Init logging (foreground only — pour nohup on relance bash dans le child) ---
 
+ASP_REPO_ROOT="$(asp::_resolve_repo_root)"
+
 if [[ "$NOHUP_MODE" -eq 0 ]]; then
     asp::init_logging "$LOG_PREFIX"
     asp::log_env

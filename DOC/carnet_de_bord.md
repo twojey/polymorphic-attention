@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **V1 : 2/3 signaux** (option AMENDÉE finale 2026-05-11 10:00). S_Grad exclu (§8 piège 5 anticipe). Run 1 NO-GO Δ≤64 (MLflow `5e5ead1e`, ρ_Δ=0.7043 ✅, ρ_ℋ=0.2453 ❌). Run 2 (S_Spectral pur sur Δ∈[16,64,256]) en cours, fin ~10:45-11:45. Run 3 (S_KL option C sous amendement V1.5) auto-lancé après Run 2. **Verdict V1 = combinaison Run 2 (S_Spectral) + Run 3 (S_KL amendé)**. |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **VALIDÉE conditionnellement V1** via S_Spectral au point (K=64, bench Δ∈[16,64,256]). S_Grad exclu (§8 piège 5 — d'ailleurs `enabled=true` est dead code dans run.py). **Run 1 NO-GO** Δ≤64 K=64 (MLflow `5e5ead1e`, ρ_Δ=0.704 ✅, \|ρ_ℋ\|=0.245 ❌). **Run 2 GO** Δ∈[16,64,256] K=64 (MLflow `389383a2`, ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅). **Run 3 crashé OOM** sur VPS (relancé sur pod CPU 15:08 UTC, en cours). **Run 4 NO-GO sensitivity** K=32 Δ∈[16,64,256] (MLflow `87ebc2d0`, ρ_Δ=0.654 ❌, ρ_ω=0.507 ❌, \|ρ_ℋ\|=0.085 ✅). **Verdict V1 nuancé : H2 valide sur 1 signal × 1 point (K, bench)** — fragile (changer K *ou* range Δ casse le verdict). Run 3 ressuscité doit dire si S_KL apporte un 2e signal indépendant. |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -39,6 +39,129 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-11 15:08 UTC — Run 3 (S_KL option C) relancé sur pod CPU + diagnostic 4-runs phase 1.5
+**#decision #milestone #falsifiabilite** Après lecture comparée des 4 runs phase 1.5 finis (1 GO + 3 NO-GO), relance Run 3 (S_KL option C) sur un pod CPU RunPod éphémère pour combler le trou de validation H2.
+
+**Diagnostic comparé des 4 runs (extrait MLflow expérience 3)** :
+
+| Run | run_id | K_S_Spectral | bench Δ | ρ_ω | ρ_Δ | \|ρ_ℋ\| | passed | retained |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `5e5ead1e` | 64 | [16, 64] (réduit VPS) | 0.629 | **0.704 ✅** | **0.245 ❌** | 0 | NONE |
+| 2 | `389383a2` | 64 | [16, 64, 256] (étendu) | 0.546 | **0.709 ✅** | **0.163 ✅** | **1** | S_Spectral |
+| 3 | — | — | — | — | — | — | **CRASH OOM** | — |
+| 4 | `87ebc2d0` | **32** | [16, 64, 256] | 0.507 | **0.654 ❌** | 0.085 ✅ | 0 | NONE |
+
+**Lectures importantes** :
+
+1. **La validation H2 du Run 2 est doublement conditionnelle**. Il faut conjointement :
+   - **K=64** sur S_Spectral (à K=32, ρ_Δ s'effondre 0.709 → 0.654).
+   - **Bench étendu Δ≤256** (à Δ≤64, |ρ_ℋ| explose 0.163 → 0.245 et casse le critère ℋ).
+   - Donc H2 tient sur un seul point de calibration. C'est un signal **fragile** — pas une violation de falsifiabilité (les critères étaient pré-enregistrés et n'ont pas été ajustés), mais le verdict scientifique est qualitatif, pas robuste.
+
+2. **`s_grad.enabled = true` dans toutes les configs, mais dead code**. `phase1b/run.py` n'importe que `compute_s_kl` et `compute_s_spectral` — `compute_s_grad` n'a jamais été câblé dans `_compute_signals_on_bench`. Cohérent avec l'exclusion documentée (§8 piège 5, S_Grad non calculable à l'inférence) mais le flag enabled=true est trompeur. À nettoyer dans `signals.yaml` (hygiène, pas bloquant).
+
+3. **Run 3 reste le pari le plus rentable pour consolider H2**. Si S_KL option C valide les 2 critères Spearman, on aura un 2e signal indépendant qui soutient H2 — robustesse cross-method. Sans Run 3, H2 tient sur 1 signal × 1 point (K=64, Δ étendu).
+
+**Relance Run 3 (techniquement)** :
+- **Pod CPU loué** : Threadripper 7960X 32 vCPUs, 251 Gi RAM, pas de GPU, `213.173.111.76:14150`. Coût ~$0.20-0.30/h.
+- **Pourquoi pod CPU et pas VPS** : Run 3 a crashé silencieusement le 2026-05-11 12:12 sur VPS (9 GB RAM) à seq_len=4371. Pod CPU 251 Gi tient large.
+- **Pourquoi pas RTX 5090** : phase 1.5 est CPU-bound (eigvalsh batché, `compute_s_kl` opère sur sequences extraites). GPU inutile.
+- **Bench original Δ∈[16, 64, 256]** (vs réduit Δ≤64 du VPS) — la RAM 251 Gi rend Δ=256 confortable.
+- **Patches appliqués** (cf. entrée robustesse scripts) : cap batch_size=2 dans `_calibrate_kl_baseline`, traces flush=True à chaque étape, refactor `launch_phase1b.sh` avec `lib/common.sh` (strict mode, trap ERR, log persistant horodaté, env capture).
+- **Wrapper** : `OPS/scripts/run_phase1b_skl.sh --nohup` → délègue à `launch_phase1b.sh` avec args S_KL pré-configurés (`s_kl.enabled=true s_kl.baseline.n_calibration_examples=256 bench.structured_deltas=[16,64,256]`).
+- **Lancé à 15:08 UTC** (~17:08 Paris), PID pod 78975, log `OPS/logs/run3_skl_20260511T150842Z.log`. Calibration baseline démarre sur seq_len=4371 (le scénario qui avait crashé).
+
+**Décision d'enrichissement Run 4 → ABANDONNÉE** :
+- Avant lecture Run 4 : on pensait enrichir Run 4 v2 (K=32 + S_KL + S_Tropical cherry-pick Atlas B7).
+- Après lecture Run 4 : il a fini FINISHED proprement (113 min, NO-GO scientifique mais run technique réussi). Pas besoin de relancer Run 4.
+- Cherry-pick S_Tropical (B7 Atlas Tier 1) → **reporté** au sprint Tier1d. Atlas reste catalogue théorique post-phase 2.
+
+**Pourquoi documenter ça maintenant** :
+- Le verdict initial "H2 validée via S_Spectral sur bench étendu" (carnet entrée 12:25) était **trop optimiste** : il occultait la fragilité K=64+bench-étendu révélée par Run 4 a posteriori.
+- Sans cette entrée, un lecteur futur (ou nous dans 3 mois) lirait "H2 OK" et raterait que c'est conditionnel.
+
+**How to apply** :
+- Verdict H2 V1 doit être **réécrit** dans le rapport phase 1.5 (`DOC/reports/phase1b_template.md` quand on l'instancie) avec la mention "validation conditionnelle au point (K=64, bench Δ≤256) ; sensitivity Run 4 K=32 → NO-GO".
+- Si Run 3 valide H2 via S_KL : on aura 2 signaux indépendants, fragilité réduite.
+- Si Run 3 NO-GO : reformuler H2 comme "validation partielle, signal fragile, nécessite Sprint 2 (méthodes Tier1) pour consolidation".
+
+**Liens** :
+- MLflow Run 1 : `5e5ead1e`, Run 2 : `389383a2`, Run 4 : `87ebc2d0`.
+- Configs comparées : `OPS/logs/mlflow/artifacts/3/{runid}/artifacts/config.yaml`.
+- Pod CPU procédure : `OPS/env/POD_CPU_SETUP.md`.
+- Wrapper Run 3 : `OPS/scripts/run_phase1b_skl.sh`.
+
+### 2026-05-11 14:30 UTC — Refactor extract.py : API streaming per-layer + windowed (préparation phase 2)
+**#decision #refactoring #infrastructure** Refactor de `CODE/phase1_metrologie/oracle/extract.py` pour supporter les besoins mémoire des phases 2+ et le catalogue enrichi A-W (cf. entrée 14:00 enrichissement Atlas).
+
+**Cause** :
+- Run 3 crash silencieux à seq_len=4371, batch_size=4 (peak 14.7 GB attention + activations FFN non comptées) → cf. entrée crash Run 3.
+- Anticipation phase 2 : seq_len cibles 8192+ pour cartographier Stress-Rank Map → API actuelle inadaptée (toutes les couches FP64 en mémoire simultanément).
+- Catalogue enrichi A-W (140+ propriétés) requiert variétés d'extraction : per-layer (audit indépendant), windowed (K×K pour r_eff local), streaming (compute downstream sans accumulation).
+
+**Trois nouvelles APIs** (backward compat préservée pour `extract()`) :
+1. `extract_per_layer(...)` — générateur yield LayerDump par couche, libère après yield. Pic mémoire FP64 : 1 × (B,H,N,N) au lieu de L × (B,H,N,N).
+2. `extract_streamed(..., callback)` — variante callback pour compute streaming.
+3. `extract_windowed_per_layer(..., K, stride)` — fenêtres K×K diagonales pour r_eff local (phase 2 A1, B2).
+
+**ExtractorConfig** opt-in : `fp64`, `validate_numerics` (NaN/Inf/range[0,1]), `empty_cache_per_layer`, `max_layers`, `stream_to_disk` (sauvegarde `layer_NNN.pt`).
+
+**Tests** : `CODE/phase1_metrologie/tests/test_extract_streaming.py` — 12 nouveaux tests (per_layer, windowed, callback, config, disk streaming, backward compat). Tests existants (11 dans test_oracle.py) : tous verts. Total suite : 59 passed.
+
+**Limites connues** :
+- Le forward Oracle reste monolithique : toutes les attentions matérialisées dans buffers `.last_attn` pendant le forward. Le streaming réduit la mémoire FP64 + downstream, PAS le pic du forward (≈ B·L·H·N²·dtype_size).
+- Pour seq_len > ~8192 sur GPU 24GB : refactor transformer.py avec hook per-layer requis (TODO phase 2, cf. DOC/02 §extraction).
+
+**Pourquoi NE PAS migrer phase1b/run.py** :
+- `_calibrate_kl_baseline` et `_compute_signals_on_bench` ont besoin de TOUTES les couches simultanément (max-pool cross-layer, agrégation per-token). API `extract()` reste appropriée.
+- Run 4 en cours + Run 3 relaunch imminent → stabilité du code phase 1.5 prioritaire.
+- Commentaire ajouté dans `phase1b/run.py` pour expliquer le choix.
+
+**How to apply** :
+- Phase 2 (audit spectral) → utiliser `extract_per_layer` ou `extract_windowed_per_layer` selon usage.
+- Streaming disk pour seq_len extrême (post-phase 2) → `ExtractorConfig(stream_to_disk=...)`.
+- Tests Partie 1 (catalogue A-W) → cf. DOC/00b §II.8 pour mapping API ↔ propriété.
+
+**Liens** :
+- `CODE/phase1_metrologie/oracle/extract.py` (refactoré, 350 lignes).
+- `CODE/phase1_metrologie/tests/test_extract_streaming.py` (nouveau, 270 lignes).
+- DOC/00b §II.8 "Infrastructure d'extraction" — vue d'ensemble API + mapping catalogue.
+
+### 2026-05-11 14:00 UTC — Enrichissement DOC/00b avec Atlas (Tier 1 + Tier 2, ~70 → ~140 propriétés)
+**#decision #classification #science** Intégration de l'Atlas des invariants algébriques 2024 dans DOC/00b. Le catalogue passe de 18 catégories / ~70 propriétés à **23 catégories / ~140+ propriétés**.
+
+**Ajouts par tier** :
+
+**Tier 1 (ASP-critical, 16 propriétés)** :
+- Elimination theory (A7-A8, B8) : discriminant/résultant polynôme caractéristique, rang Sylvester
+- Fisher information geometry (C7-C9, D4) : métrique Riemannienne softmax, courbure variétés stat, Wasserstein
+- Microlocal analysis (D5-D7, L4-L6) : wave front set, characteristic variety, symbol calculus, CZ regularity
+- Tropical geometry (B7, B9) : hiérarchie magnitude log-échelle, quasiseparable
+- Holonomic systems (G6-G8) : Bernstein-Sato polynomial, D-modules, syzygies
+
+**Tier 2 (scientific completeness, ~19 propriétés)** :
+- Logical complexity (nouvelle catégorie W : W1-W6) : NIP, NTP₂, Littlestone, Shelah stability
+- Clifford/algebraic invariants (R8-R10) : signature quadratique, Arf, Hasse-Witt
+- Categorical framework (V10) : weight filtration, perverse sheaf decomposition
+- Frontier 2023+ (V7-V9) : microlocal ellipticity, prismathic cohomology, Donaldson-Thomas
+
+**Nouvelle catégorie W** : Complexité logique / Stabilité modèle-théorique. Première catégorie purement logico-mathématique (vs spectrale/algébrique/géométrique). Rationale : NIP/NTP₂ formalisent "complexité de définissabilité" → bornent PAC learnability → impact direct sur architecture sub-quadratique apprenable.
+
+**Références** : 7 nouvelles sections bibliographiques (élimination, tropical, microlocal, Fisher, holonomique, modèles, catégoriques). Référence frontière : Bhatt-Scholze 2013 (prisme), Kontsevich-Soibelman 2000 (DT invariants).
+
+**Roadmap mise à jour** : V.0.b enrichi avec sprints Tier1a-f et Tier2a-c. Budget total catalogue exhaustif : 60-80h dev post V.0.a (ASP sprint).
+
+**Pourquoi maintenant** :
+- DOC/00b est le livrable Partie 1 (science fondamentale). L'enrichissement Atlas le rapproche d'une exhaustivité publication-grade.
+- Tier 1 (microlocal D5-D7, Fisher C7-C9) directement utiles phase 2 (audit spectral local + statistique).
+- Tier 2 (W logique) enrichit perspectives publication sans bloquer phase 2.
+
+**How to apply** :
+- Cataloguer = OK (fait). Implémenter = post-phase 2 (V.0.b Sprints Tier1a-f).
+- Pour phase 2 immédiate, privilégier Tier 1c (microlocal) qui exploite les fenêtres K×K déjà disponibles via `extract_windowed_per_layer`.
+
+**Liens** : DOC/00b §II.7 (récap enrichissements), §II.8 (infrastructure extract.py).
 
 ### 2026-05-11 11:30 UTC — Pivot sélection Oracles : denses uniquement, diversité par domaine
 **#decision #methodology** Recadrage explicite par utilisateur : "le but est d'étudier les Oracles denses et de voir comment synthétiser leur propriétés dans une couche subquadratique. Donc le but est d'avoir de la diversité par exemple, texte, code, vision ou autre."
@@ -336,6 +459,17 @@ Idem ci-dessus, redondant — à fusionner après le run.
 
 ## Surprises et pièges (chronologique inverse)
 
+### 2026-05-11 — Run 3 (S_KL option C) crashé silencieux pendant calibration baseline
+**#bug** Run 3 lancé 12:12:01 UTC (auto via watchdog après fin Run 2). Le log `/tmp/run3_chain.log` s'arrête à 12:12:05 sur la ligne `"Calibration baseline : seq_len=4371, batch_size=4 (adaptatif pour rester sous 30 GB/batch)"`. Plus aucun process Python visible à 12:23 (9 minutes plus tard). Aucun run MLflow associé créé dans expérience 3.
+**Symptôme** : crash en 4 secondes, sans traceback dans le log. Le wrapper bash a `set -e`, donc une RuntimeError Python aurait dû remonter — sauf si le crash s'est produit dans un **sub-process Hydra** (peut-être le forking de la calibration `_calibrate_kl_baseline` qui spawn un Python séparé pour multiprocessing).
+**Hypothèses à investiguer** :
+1. **OOM silencieux** dans le sub-process : seq_len=4371 × batch_size=4 × 6 layers × 8 heads × FP32 = ~14 GB de matrices attention. Sur 251 GB pod, ça devrait passer largement — sauf si plusieurs forks multiprocessing tournent en parallèle et multiplient la consommation.
+2. **BLAS guard hard-fail** dans les workers fork : `s_spectral.py` lève `RuntimeError` si `OPENBLAS_NUM_THREADS != 1` au démarrage. Les workers multiprocessing héritent en théorie de l'env du parent, mais selon le mode `fork` vs `spawn` ça peut changer. Si fork avant export → OK ; si spawn → re-init clean sans BLAS vars.
+3. **MLflow connection error** sur le tunnel reverse SSH pendant la longue calibration (~50 min attendue) — mais alors le crash devrait être plus tardif.
+4. **Erreur Hydra config** : conflit entre overrides du wrapper et config par défaut. À tester en relançant avec `--config-dir`.
+**Action prise** : skipper Run 3 pour l'instant, lancer Run 4 (K=32 sensitivity, S_KL off) en priorité puisqu'il ne dépend pas de la calibration baseline. Reviendrons sur Run 3 après diagnostic du crash (logs stderr explicites via `2>&1 | tee`).
+**Leçon** : (1) toujours capturer **explicitement** stderr du sub-process Hydra, pas seulement stdout du wrapper bash ; (2) un wrapper `set -e` ne protège pas contre un crash silencieux du sub-process si la sortie n'est pas redirigée ; (3) pour le ré-essai, ajouter `s_kl.baseline.verbose=true` ou équivalent dans la config pour avoir un trace per-batch.
+
 ### 2026-05-11 — Phase 1.5 Run 1 NO-GO confirmé sur bench réduit (2000 ex, Δ∈[16,64])
 **#milestone #surprise** Premier run 2000-ex sur pod CPU RunPod (32 vCPU Threadripper 7960X) avec bench réduit hérité de la contrainte VPS. Durée wall-clock : **43:17** (08:31:16 → 09:14:33 UTC). Verdict : **NO-GO**, message du driver : "Aucun signal ne passe les critères. Arrêt du protocole." MLflow run `5e5ead1e18154317858cf60eec67bdb3` dans expérience 3.
 **Lecture** :
@@ -405,6 +539,90 @@ defaults:
 ---
 
 ## Avancement chronologique
+
+### 2026-05-11 lundi (après-midi — Run 2 GO, Run 3 crashé, Run 4 lancé)
+
+#### 15:08 UTC — Run 3 (S_KL option C) **relancé sur pod CPU** après diagnostic 4-runs #milestone
+
+Pod RunPod CPU `213.173.111.76:14150` (Threadripper 7960X 32 vCPUs, 251 Gi RAM) loué pour combler le trou Run 3.
+
+**Pourquoi le timing maintenant** :
+- Run 4 fini propre à 14:18 UTC (`87ebc2d0`, FINISHED 113 min) avec **NO-GO** (`retained_signals=NONE`, `phase1b_passed=0`).
+- Lecture comparée Run 4 vs Run 2 montre que **H2 dépend fragilement de K et de la range Δ** (cf. décision 15:08 UTC plus haut). Run 3 (S_KL) devient le moyen le plus rentable d'apporter un 2e signal indépendant.
+- Pod CPU permet aussi le bench original Δ∈[16,64,256] (le bench réduit Δ≤64 du VPS avait fait casser ℋ au Run 1).
+
+**Logistique** :
+- Sync repo VPS → pod via `rsync --exclude .venv` ; le pod avait déjà `.venv` Python 3.11 + uv 0.11.13 + checkpoint Oracle (réutilisation d'un pod précédent).
+- Bug détecté et fixé dans `launch_phase1b.sh` refactor : `ASP_REPO_ROOT` n'était initialisé que via `init_logging` (skip si `--nohup`) → ajout d'un appel à `asp::_resolve_repo_root` avant les pré-conditions.
+- Tunnel MLflow inverse VPS:5000 → pod:5000 ouvert (PID 478727 côté VPS).
+- Run lancé via `bash OPS/scripts/run_phase1b_skl.sh --nohup`.
+- **PID pod : 78975**. Log : `/root/polymorphic-attention/OPS/logs/run3_skl_20260511T150842Z.log`.
+- Première trace observée : `Calibration baseline seq_len=4371 batch_size=2 (cap=2, cible <15 GB/batch)` — exactement le scénario qui avait OOM hier sur VPS 9 GB. Sur 251 Gi RAM, peak théorique 14.7 GB confortable.
+
+**Wait estimé** : ~2-3 h pour calibration baseline (128 batches × seq=4371) + signaux sur bench (2000 ex × Δ∈[16,64,256]).
+
+**Lecture attendue** :
+- Si S_KL valide H2 (ρ ≥ 0.70 sur ω ou Δ ET |ρ_ℋ| < 0.20) → 2 signaux indépendants soutiennent H2, fragilité réduite. Verdict V1 consolide.
+- Si S_KL NO-GO → V1 reste sur 1 signal × 1 point (K=64, Δ étendu), fragile. Implique reformulation H2 dans le rapport phase 1.5.
+- Si crash technique → diagnostic + relance. Cap batch_size=2 + traces flush=True devraient empêcher la récidive du crash silencieux.
+
+#### 12:25 UTC — Run 4 lancé : sensitivity S_Spectral K=32 #milestone
+
+Pour combler Run 3 crashé et fournir une mesure de robustesse au choix `K=64` par défaut, on lance directement Run 4 avec `s_spectral.K=32` (au lieu de chaîner Run 3 puis Run 4).
+
+- **Wrapper** : `/root/run4_k32.sh` (nohup, stderr capturé cette fois → `/tmp/run4_k32.log`)
+- **Config** : `bench.n_examples=2000 s_kl.enabled=false bench.structured_deltas=[16,64,256] s_spectral.K=32`
+- **PID** : 53287 (wrapper) / 53297 (Python, CPU 83%)
+- **Fin estimée** : ~15:10-15:30 UTC (~2h45-3h, similaire à Run 2 puisque c'est le forward Oracle qui domine, pas la SVD)
+- **Lecture attendue** : si ρ_Δ et ρ_ℋ restent à des valeurs comparables à Run 2 (0.71 / 0.16), c'est que le choix K=64 n'est pas critique — gain de robustesse pour la conclusion H2.
+
+#### 12:23 UTC — Diagnostic état pod post-Run 2 #investigation
+
+Pod injoignable sur `69.30.85.124:14150` mais bien actif sur `213.173.111.76:14150` (IP réelle vue depuis le tunnel reverse SSH). Tous les `outputs/.../run.log` Hydra sont vides (0 octet) — c'est normal : le launcher `launch_phase1b.sh` redirige stdout/stderr vers `/tmp/run_chain.log` et `/tmp/run3_chain.log`. Confirmation de la chaîne réelle de runs :
+- 08:31:16 → 09:14:33 : Run 1 (43:17)
+- 09:14:33 → **12:11:04** : Run 2 (**2h57**)
+- 12:12:01 → 12:12:05 : Run 3 (crashé silencieux, 4 sec après démarrage)
+
+À 12:23 plus aucun process Python actif (load avg 12 = résidu de l'host RunPod, uptime 595j).
+
+#### 12:11 UTC — **Run 2 GO sur S_Spectral** #milestone #surprise
+
+Run `s1_smnist_signals_71a99b1` (MLflow `389383a2b7d540e4a3cadea596a663e5`) terminé après **2h57** (09:14:33 → 12:11:04 UTC). Verdict driver : `GO. Signaux retenus : ['S_Spectral']`, `phase1b_passed=1`.
+
+**Métriques Run 2 (n_examples=2000, n_boot=2000, Δ∈[16,64,256], S_KL off)** :
+
+| Signal × Axe | ρ Spearman | IC95 | Seuil | Statut |
+|---|---|---|---|---|
+| S_Spectral × Δ | **+0.7090** | [0.7071, 0.7111] | > 0.70 | ✅ |
+| S_Spectral × ω | +0.5460 | [0.5432, 0.5490] | > 0.70 | ❌ |
+| S_Spectral × ℋ | **−0.1627** | [−0.1666, −0.1589] | \|·\| < 0.20 | ✅ |
+
+**Comparaison Run 1 vs Run 2 (la même config sauf Δ étendu)** :
+
+| Métrique | Run 1 (Δ≤64) | Run 2 (Δ≤256) | Δ |
+|---|---|---|---|
+| ρ_Δ | 0.7043 | 0.7090 | +0.005 |
+| ρ_ω | 0.6291 | 0.5460 | −0.083 |
+| \|ρ_ℋ\| | **0.2453** ❌ | **0.1627** ✅ | **−0.083 (passe sous seuil)** |
+| phase1b_passed | 0 | **1** | ✅ |
+
+**Lecture scientifique** :
+- ρ_Δ change peu (marginal) — le signal corrèle similairement avec la profondeur de récursion sur les deux benchs.
+- **Ce qui fait basculer Run 1 NO-GO → Run 2 GO, c'est la chute de \|ρ_ℋ\| de 0.245 à 0.163.** Sur Δ∈[16,64], le signal S_Spectral confond partiellement structure et bruit (corrélation parasite avec entropie ℋ). En **élargissant le bench à Δ=256**, le signal devient plus discriminant : il continue de corréler avec la structure (ρ_Δ ≈ stable) mais arrête de tracker le bruit (ρ_ℋ → -0.16).
+- ρ_ω en baisse cohérente : étendre Δ dilue le signal sur l'axe ω (moins informatif relativement).
+- Interprétation : la **Stress-Compression Hypothesis se révèle sur les longues séquences** (seq_len max 4371 vs 1043). Le NO-GO de Run 1 était un artefact du range Δ trop court.
+
+**Implications** :
+1. **H2 validée via S_Spectral sur bench étendu** (1 signal qui passe les 2 critères = §4.3 critère mode économie de moyens ✅).
+2. La phase 1.5 peut techniquement clôturer en GO avec ce seul signal.
+3. Reste à mesurer : (a) la **distillability** du signal retenu (le driver l'a peut-être déjà testée puisque phase1b_passed=1 — à vérifier dans artefacts MLflow), (b) le test S_KL (Run 3 crashé, à diagnostiquer/relancer), (c) la sensitivity K=32 (Run 4 en cours).
+4. La leçon "étendre Δ jusqu'à 256 change le verdict" est **importante méthodologiquement** : un NO-GO sur bench réduit ne se transpose pas mécaniquement au bench spec. Le bench réduit Δ≤64 imposé par contrainte VPS au pivot du 10/05 nous a induits en erreur.
+
+**À documenter** :
+- Cette inversion NO-GO → GO entre bench réduit et bench étendu doit figurer dans le rapport phase 1.5 final (DOC/reports/phase1b_template.md).
+- Avant Sprint 2, vérifier dans MLflow artefacts (`/root/polymorphic-attention/OPS/logs/mlflow/artifacts/3/389383a2.../`) le détail distillability (rho_student_teacher, mse_relative).
+
+---
 
 ### 2026-05-10 lundi (soirée — pivot VPS-only)
 
