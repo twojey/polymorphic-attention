@@ -40,6 +40,21 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 10:10 UTC — Clarification de cadrage : phase 1.5 ≠ test existentiel du projet
+**#decision #clarification** Suite à dérive narrative (j'ai présenté phase 1.5 comme "LE test existentiel du projet"), recadrage explicite par l'utilisateur :
+
+**But réel du projet ASP** : partir d'un Oracle dense (O(N²)) et synthétiser une **attention sub-quadratique** (idéalement linéaire) qui imite l'Oracle. C'est ça l'objectif final, point.
+
+**Allocation dynamique de rang guidée par signal observable** = **UNE hypothèse retenue** pour atteindre cet objectif. PAS l'unique. Autres hypothèses ouvertes : kernel approx (Performers, Linformer), attention sparse, low-rank decomp explicite, state-space models (Mamba-like), etc.
+
+**Conséquence pour la lecture de phase 1.5** :
+- **GO** = l'hypothèse "allocation dynamique guidée" est viable → on continue cette voie (phases 2, 3, 4 ASP).
+- **NO-GO** = cette hypothèse ne tient pas dans ce cadre → **fermeture d'une branche**, **pivot possible vers une autre approche sub-quadratique**. Le projet ASP au sens large reste ouvert. Le travail phase 1 (Oracle, SSG, banc) reste valorisé pour tester d'autres hypothèses (par ex. Performer-like ou Mamba-like comme student de l'Oracle).
+
+**Why ce recadrage** : la spec DOC/01b §0 dit "si la réponse est non, le Spectromètre ne peut pas exister" et "le projet s'arrête". Ce "le projet" désigne **la voie spécifique ASP-via-allocation-dynamique**, pas l'objectif sub-quadratique en général. La distinction n'est pas explicitée dans DOC/01b ; à clarifier dans une révision future de la doc.
+
+**How to apply** : pour la lecture des verdicts Run 2 + Run 3, ne pas dramatiser un éventuel NO-GO. C'est une réorientation, pas un échec terminal. Le rapport phase 1.5 doit explicitement mentionner les pivots possibles si NO-GO.
+
 ### 2026-05-11 10:00 UTC — RE-REVISION : retour à option AMENDÉE (Run 3 réactivé)
 **#decision** Suite à challenge utilisateur ("on aura un signal complet ?"), reconnaissance que l'option STRICTE actuelle laisse H2 globalement à 1/3 signaux testés — c'est aussi un trou, juste d'un autre type. L'amendement option C pour S_KL est **mathématiquement défendable** (slice + renormalize d'une distribution = reste une distribution ; baseline ω=0/δ=N-3 = vraie noise sans structure).
 
