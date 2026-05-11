@@ -86,3 +86,8 @@ multirun/
 
 # --- Stage 0.2 — résultats machine ---
 OPS/env/primitives_results.json
+
+# --- Sorties d'agents éphémères (qa-team, ultrareview, etc.) ---
+/QAREPORT.md
+/QAREPORT*.md
+/ULTRAREVIEW*.md
