@@ -40,6 +40,37 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 10:25 UTC — Roadmap "tests complets" Partie 1 — extension chaîne pod
+**#decision** Suite cadrage 10:15 (Partie 1 exige tests complets), planification roadmap pour compléter la classification scientifique.
+
+**Court terme (sur ce pod, avant fermeture, ~$1-3 supplémentaires)** :
+- ✅ **Run 4** : sensitivity S_Spectral K=32 vs K=64 défaut (auto-chainé après Run 3 dans `/root/run3_skl.sh`). Test stabilité du verdict S_Spectral selon le choix de K. Spec §8 piège 2 dit K typiquement 32/64/128.
+- ⏸️ **Run 5** (K=128) : non retenu cette session (pour économiser temps pod).
+- ⏸️ **Run 6** (Distillabilité) : pas trivialement automatisable. La distillabilité a un module `distillability.py` mais n'est PAS appelée depuis `run.py` actuel. Nécessite mini-Sprint dev (intégration code) avant pouvoir lancer. Reportée.
+
+**Moyen terme (Sprint dédié, hors pod actuel)** :
+- **Sprint S_Grad** : implémenter S_Grad calculation (mode train sur bench), ~3-5h dev. Couvre le 3e signal manquant pour Partie 1 complète.
+- **Sprint Distillabilité** : intégrer `distillability.py` dans `run.py`, ajouter override Hydra `distillability.enabled=true`, ~1-2h dev.
+- **Sprint Oracle V2** : re-train Oracle avec ω∈[0..12], Δ∈[0..4096] pour bench pleine spec. ~12-24h GPU.
+
+**Long terme (publication)** :
+- Multi-Oracle (CIFAR, texte) → universalité
+- Multi-architecture (Mamba, RetNet, Performer) → catalogue cross-archi
+- Catalogue de structures étendu (livrable Partie 1 final)
+
+**État chaîne pod actuelle** :
+```
+PID 2283 (Run 1+2 wrapper) → fini ~10:45-11:45
+   ↓ détecté par watchdog PID 33693
+Run 3 (S_KL amendement, 2000 ex) → ~3-4h
+   ↓ chainé directement
+Run 4 (S_Spectral K=32, 2000 ex) → ~30 min
+   ↓
+fin chaîne → fermeture pod possible
+```
+
+**Fin estimée chaîne complète** : ~14:00-17:00 UTC selon vitesse réelle Run 3.
+
 ### 2026-05-11 10:15 UTC — Cadrage final consolidé : projet à 2 livrables distincts
 **#decision #clarification** Affinage du recadrage 10:10 par utilisateur. Le projet ASP a **deux livrables distincts**, à ne pas confondre :
 
