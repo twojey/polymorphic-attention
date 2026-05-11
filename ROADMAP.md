@@ -404,6 +404,30 @@ Spec : [DOC/00b_classification_proprietes.md](DOC/00b_classification_proprietes.
 - [ ] Réplication des tests sur autres Oracles (CIFAR, texte) → mesure universalité
 - Coût : multiplie compute, peu de dev.
 
+### 1c.10 — Sélection Oracles dense diversifiés (cf. DOC/00d, décision 2026-05-11 11:30)
+
+Contexte : le projet ASP étudie les **Oracles denses** uniquement, pour synthétiser leurs propriétés en sub-quad. Diversité par **domaine d'entraînement**.
+
+**6 Oracles retenus** (Palier 1, ~$10-20 compute) :
+- [ ] OR — Notre Oracle SMNIST V1 (contrôlé, déjà disponible)
+- [ ] LL — Llama 3.2 1B (texte général)
+- [ ] SC — StarCoder 2 3B (code)
+- [ ] DV — DINOv2 ViT-B/14 (vision pure)
+- [ ] CL — CLIP ViT-L/14 (multimodal)
+- [ ] ES — ESM-2 35M ou 150M (biologique)
+
+**Extension Palier 2** (si batterie OK, ~$30-50 total) :
+- [ ] DC — DeepSeek-Coder 1.3B (intra-domaine code)
+- [ ] WP — Whisper-small encoder (audio)
+- [ ] DM — DeepSeek-Math 7B (math/raisonnement)
+- [ ] L8 — Llama 3.1 8B (test scaling vs Llama 3.2 1B)
+
+**Hors scope batterie** : architectures sub-quadratiques (Mamba, Performer, Linformer, Hyena, etc.). Restent dans le catalogue théorique 00b mais pas testées expérimentalement.
+
+**Paris a priori pré-enregistrés** : cf. [DOC/00c_predictions_signatures.md](DOC/00c_predictions_signatures.md).
+
+**Protocole d'entrées standardisé** : cf. [DOC/00d_oracles_battery.md](DOC/00d_oracles_battery.md).
+
 ### 🚪 Go/no-go Partie 1 finale
 - Catalogue complet → publication "Mathematical signature of attention operators" (papier + library open source).
 - Item résiduel non couvert → flagué pour Sprint dédié futur.

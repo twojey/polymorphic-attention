@@ -40,6 +40,36 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 11:30 UTC — Pivot sélection Oracles : denses uniquement, diversité par domaine
+**#decision #methodology** Recadrage explicite par utilisateur : "le but est d'étudier les Oracles denses et de voir comment synthétiser leur propriétés dans une couche subquadratique. Donc le but est d'avoir de la diversité par exemple, texte, code, vision ou autre."
+
+**Conséquences** :
+- ❌ Architectures sub-quadratiques (Mamba, Performer, Linformer, Hyena, BigBird, Reformer) **retirées du scope** de la batterie. Elles n'apportent pas la connaissance que le projet ASP cherche (comprendre les denses pour les synthétiser).
+- ✅ Sélection retenue : **6 Oracles denses** diversifiés par domaine d'entraînement (OR contrôlé / LL texte / SC code / DV vision pure / CL multimodal / ES biologique).
+
+**Pourquoi ce choix** :
+- ASP veut comprendre les **attentions denses** pour synthétiser leurs propriétés en sub-quadratique. Tester d'autres archs sub-quad ne nourrit pas ce but.
+- La diversité par **domaine d'entraînement** permet de tester l'hypothèse fondamentale : "la signature mathématique émerge du domaine, pas de l'architecture" — donc Llama (texte) vs StarCoder (code) vs DINOv2 (vision) sur la MÊME architecture (Transformer dense) doit révéler des structures différentes.
+- Économie : ~$10-20 compute total au lieu de ~$70-100 (option ambitieuse).
+
+**Documents créés/mis à jour** :
+- **DOC/00c_predictions_signatures.md** : RÉÉCRITURE complète. Ancien pari sur 8 Oracles (DT/LA/PF/LF/MB/HY/BB/RF) → nouveau pari sur 6 Oracles denses (OR/LL/SC/DV/CL/ES). Ré-évaluation de chaque cellule des 8 tableaux de paris dans le contexte "tous denses, diversité domaine".
+- **DOC/00d_oracles_battery.md** (NOUVEAU) : sélection précise des 6 Oracles avec ID HuggingFace + protocole d'entrées standardisé par domaine (datasets, taille échantillon, longueurs, paramètres extraction) + procédure d'exécution + format de rapport.
+- DOC/README.md : index mis à jour pour 00d.
+- Carnet (cette entrée).
+
+**Patterns identifiés a priori (avec ce nouveau panel)** :
+- Tests **uniformes** (toutes denses pareilles) : G algébriques, R Mercer, stochasticité ligne. Servent de contrôle de validation.
+- Tests **discriminants** : A1 r_eff (DV bas, SC haut attendu), B5 block (DV/SC fort), B6 bandedness (ES fort), F1 Lipschitz (DV fort), K4 communautés (tous mais sur dimensions différentes), L1/L3 fréquentiel (DV/ES fort).
+- Tests à **forte incertitude** (gain d'info maximal) : Q4 nestedness, H3-H4 cross-layer, K (TDA), L (wavelets).
+- Tests **les plus utiles pour ASP** : M1/M2 conditionnelles à l'entrée — comprendre comment l'attention varie selon le type d'input.
+
+**How to apply** :
+- La batterie de tests (DOC/00b) reste l'horizon scientifique exhaustif (Partie 1) — pas changée.
+- L'exécution pratique se concentre sur les 6 Oracles denses sélectionnés.
+- Score de prédiction (00c) sera de N/35 paris discriminants validés.
+- Sub-quadratiques restent dans le **catalogue théorique** de 00b (catégories O, P, Q, R, S, T, U, V) mais ne sont pas testés expérimentalement.
+
 ### 2026-05-11 11:00 UTC — Pré-enregistrement des paris a priori (DOC/00c)
 **#decision #methodology** Avant exécution de la batterie classification (DOC/00b), pré-enregistrement des intuitions/paris sur ce que devraient donner les tests pour 8 Oracles classiques d'attention :
 - DT (Dense Transformer), LA (Linear Attention), PF (Performer), LF (Linformer), MB (Mamba/SSM), HY (Hyena), BB (BigBird), RF (Reformer)

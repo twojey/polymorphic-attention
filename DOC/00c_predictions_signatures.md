@@ -1,27 +1,28 @@
 # 00c — Prédictions a priori des signatures mathématiques
 
-**But.** Pré-enregistrer des **paris intuitifs** sur les résultats attendus de la batterie Partie 1 (DOC/00b) appliquée à différents Oracles d'attention. Document **falsifiable** : la confrontation de ces prédictions aux mesures réelles produit de la connaissance dans tous les cas.
+**But.** Pré-enregistrer des **paris intuitifs** sur les résultats attendus de la batterie Partie 1 (DOC/00b) appliquée à un panel d'**Oracles denses** diversifiés par domaine d'entraînement. Document **falsifiable** : la confrontation de ces prédictions aux mesures réelles produit de la connaissance dans tous les cas.
 
 > **Méthodologie** : ce document est **pré-enregistré avant exécution de la batterie**. Il NE doit PAS être modifié post-hoc en fonction des résultats. Toute modification doit être horodatée et justifiée. La valeur scientifique réside précisément dans la confrontation paris vs mesures.
 >
-> **Cadrage** : Partie 1 (science fondamentale, cf. DOC/00b). Pas spécifique au projet ASP — c'est un test de l'état de l'art théorique sur un panel d'opérateurs d'attention.
+> **Cadrage** : Partie 1 (science fondamentale, cf. DOC/00b). Le but du projet ASP est d'étudier les **Oracles denses** (attentions O(N²)) pour comprendre comment synthétiser leurs propriétés dans une couche sub-quadratique (Partie 2). La diversité du panel vient donc du **domaine d'entraînement**, pas de l'architecture.
 
-Date d'enregistrement : **2026-05-11 ~11:00 UTC**.
+Date d'enregistrement initial : **2026-05-11 ~11:00 UTC** (8 Oracles dense+sub-quad).
+Date de révision **(pivot méthodologique)** : **2026-05-11 ~11:30 UTC** (6 Oracles denses diversifiés). Justification de la révision : recentrage explicite sur l'objectif "comprendre les Oracles denses" — les architectures sub-quadratiques (Mamba, Performer, etc.) ne sont plus dans le scope de la batterie.
 
 ---
 
-## 1. Oracles considérés (8 candidats représentatifs)
+## 1. Oracles considérés (6 Oracles denses, diversité par domaine)
 
-| Code | Oracle | Famille | Référence |
-|---|---|---|---|
-| **DT** | Transformer dense (softmax attention classique) | référence O(N²) | Vaswani et al. 2017 |
-| **LA** | Linear Attention (kernel feature map) | kernel φ(Q)φ(K)^T | Katharopoulos et al. 2020 |
-| **PF** | Performer (Random Fourier Features) | kernel approx aléatoire | Choromanski et al. 2021 |
-| **LF** | Linformer (low-rank projection) | low-rank global k | Wang et al. 2020 |
-| **MB** | Mamba / S4 (State-Space Model) | state-space causal | Gu & Dao 2023 |
-| **HY** | Hyena (long convolution) | implicit conv FFT | Poli et al. 2023 |
-| **BB** | BigBird (sparse global+local+random) | sparse hybride | Zaheer et al. 2020 |
-| **RF** | Reformer (LSH attention) | hash-based sparse | Kitaev et al. 2020 |
+| Code | Oracle | Domaine | Taille | Attention |
+|---|---|---|---|---|
+| **OR** | Notre Oracle SMNIST V1 | contrôlé (structure (ω,Δ,ℋ) connue) | ~5M | dense softmax causale |
+| **LL** | Llama 3.2 1B | texte général | 1B | dense softmax causale |
+| **SC** | StarCoder 2 3B | code | 3B | dense softmax causale |
+| **DV** | DINOv2 ViT-B/14 | vision pure (sans texte) | 86M | dense softmax bidirectionnel (ViT) |
+| **CL** | CLIP ViT-L/14 | multimodal vision↔texte | 304M | dense softmax bidirectionnel (ViT) |
+| **ES** | ESM-2 (35M-150M) | biologique (séquences protéines) | 35-150M | dense softmax bidirectionnel |
+
+**Toutes denses, toutes O(N²)** par construction. La diversité est dans **le domaine d'entraînement** (SMNIST jouet / langage / code / vision pure / multimodal / biologique).
 
 ## 2. Légende cellules
 
@@ -36,178 +37,181 @@ Date d'enregistrement : **2026-05-11 ~11:00 UTC**.
 
 ## 3. Tableaux de prédictions
 
-### Tableau 1 — Propriétés algébriques (G) + invariants linéaires fondamentaux
+### Tableau 1 — Algébriques (G) — toutes les attentions denses sont quasi-identiques ici
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **G5** Linéarité (en x) | ❌ | ❌ | ❌ | ❌ | 🟢 | 🟢 | ❌ | ❌ |
-| G2 Symétrie A=A^T | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| G3 Idempotence A²≈A | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
-| Stochasticité ligne (sum=1) | ✅ | ✅ | ✅ | ✅ | ❓ | 🔴 | ✅ | ✅ |
-| Causalité (triangulaire inf.) | ✅ | ✅ | ✅ | 🟡 | ✅ | ✅ | ✅ | 🟡 |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **G5** Linéarité (en x) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| G2 Symétrie A=A^T | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| G3 Idempotence A²≈A | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 |
+| Stochasticité ligne (sum=1) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Causalité (triangulaire inf.) | ✅ | ✅ | ✅ | ❌ (ViT bidir) | ❌ (ViT bidir) | ❌ (ESM bidir) |
 
-**Patterns** : SSM/conv (MB, HY) sont les seuls **vraiment linéaires en x** (pas de softmax data-dependent). Le reste est non-linéaire à cause du softmax/kernel data-dep. La **symétrie est nulle pour tous** (Q/K asymétriques). **Linéarité G5 = test discriminant entre "data-dependent" vs "fixed-kernel"**.
+> **Pattern** : ces propriétés ne discriminent PAS entre Oracles denses (toutes pareilles). Sauf la **causalité** qui sépare les autorégressifs (OR, LL, SC) des bidirectionnels (DV, CL, ES). Pour Partie 1, ces tests servent surtout à **valider la batterie** (tous les Oracles doivent passer "stochasticité ligne", sinon bug).
 
-### Tableau 2 — Spectrales (A) — où les sub-quadratiques laissent une signature
+### Tableau 2 — Spectrales (A) — où la diversité des domaines apparaît
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **A1** r_eff faible par fenêtre K | 🟢 (concentré) | 🟢 | 🟢 | ❌ (rang≤k) | 🟢 | 🟡 | 🟡 | 🟢 |
-| A3 Conditionnement κ borné | 🟡 | 🟢 | 🟢 | ❌ (mal cond.) | 🟢 | 🟢 | 🟡 | 🟡 |
-| A4 Entropie spectrale faible | 🟢 | 🟢 | 🟢 | ✅ | 🟢 | 🟢 | 🟡 | 🟢 |
-| A5 Décroissance σ_i exponentielle | 🟡 | 🟢 | 🟢 | ✅ (à r) | 🟢 | 🟢 | 🟡 | 🟡 |
-| A6 Participation ratio bornée | 🟢 | 🟢 | 🟢 | ✅ | 🟢 | 🟢 | 🟡 | 🟢 |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **A1** r_eff faible par fenêtre K | 🟢 | 🟢 | 🟡 (code = précis) | ✅ (vision spat.) | 🟢 | 🟢 |
+| A3 Conditionnement κ borné | 🟡 | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| A4 Entropie spectrale faible | 🟢 | 🟢 | 🟡 | ✅ | 🟢 | 🟢 |
+| A5 Décroissance σ_i exponentielle | 🟡 | 🟡 | 🟡 | ✅ | 🟡 | 🟡 |
+| A6 Participation ratio bornée | 🟢 | 🟢 | 🟡 | ✅ | 🟢 | 🟢 |
 
-**Patterns** : tout le monde est **low-rank effectif** (résultat empirique connu). Linformer est le SEUL avec **rang strictement borné** par construction (=k). Conditionnement de Linformer **mauvais** (rank-deficient → σ_min très petit).
+> **Pattern attendu** : DINOv2 (vision pure spatiale) doit avoir le **rang effectif le plus faible** (pixels voisins corrélés → low-rank). StarCoder (code) doit avoir le **rang effectif le plus haut** parmi les denses (logique précise = chaque token compte → moins de redondance). Si pas observé → revisiter l'hypothèse "vision = low-rank".
 
-### Tableau 3 — Structurelles (B) + Rang de déplacement (O) — la signature compression
+### Tableau 3 — Structurelles (B) — la signature compression
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **B1** Toeplitz-ness (data-indep.) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| B2 Rang Hankel local faible | 🟡 | 🟢 | 🟢 | ✅ | ✅ | ✅ | 🟡 | 🟡 |
-| B4 Sparsité effective | 🟡 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| B5 Block-diagonality | 🔴 | ❌ | ❌ | ❌ | 🔴 | ❌ | ✅ (local) | 🟡 (LSH bucket) |
-| B6 Bandedness (largeur faible) | 🟡 | ❌ | ❌ | ❌ | ❌ | ❌ | 🟡 | ❌ |
-| **O1** Toeplitz-like (rang dépl. ≤ 2) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| O2 Cauchy-like (rang dépl. ≤ 1) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Low-rank global | ❌ | ❌ | ❌ | ✅ | 🟡 | ❌ | ❌ | ❌ |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **B1** Toeplitz-ness (data-indep.) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| B2 Rang Hankel local faible | 🟡 | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| B4 Sparsité effective | 🟡 | 🟡 | 🟢 (matching local) | ❌ | ❌ | ❌ |
+| B5 Block-diagonality | 🔴 | 🔴 | 🟡 (fonctions) | 🟢 (patches voisins) | 🟡 | 🔴 |
+| B6 Bandedness (largeur faible) | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | 🟢 (séq. courtes) |
+| Low-rank global | ❌ | ❌ | ❌ | 🟡 | 🔴 | 🔴 |
 
-**Patterns clés** :
-- **Hyena** est le SEUL Toeplitz vrai (long conv = convolution = Toeplitz par construction). Test de commutation Z·A = A·Z **doit passer** pour Hyena, échouer pour les autres.
-- **Linformer** est explicitement low-rank global (= construction).
-- **BigBird/Reformer** sont sparse mais pas low-rank.
-- **Cauchy-like** : aucun Oracle classique ne tombe ici → opportunité de classe non-explorée.
+> **Pattern attendu** :
+> - **DINOv2** : block-diagonality forte attendue (patches voisins = bloc d'attention concentrée)
+> - **StarCoder** : sparsité effective + block (fonctions = blocs séparés)
+> - **ESM-2** : bandedness pour séquences courtes (interactions locales protéines)
+> - Pas de Toeplitz pur attendu (data-dep. exclut ça pour toute attention dense)
 
-### Tableau 4 — Réalisation Ho-Kalman (P) + Hiérarchique (Q)
+### Tableau 4 — Rang de déplacement (O) + Ho-Kalman (P)
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **P1** Rang Hankel global fini | ❌ | 🟢 | 🟢 | ✅ | ✅ (=d state) | ✅ | ❓ | 🟡 |
-| P3 Décroissance HSV exponentielle | ❌ | 🟢 | 🟢 | ✅ | ✅ | 🟢 | ❓ | ❓ |
-| **P4** Ordre minimal n borné | ❌ | 🟢 | 🟢 | ✅ (=k) | ✅ (=d) | 🟢 | ❓ | ❓ |
-| Q2 Rang local blocs admissibles k faible | ❓ | 🟢 | 🟢 | ✅ | 🟡 | 🟢 | ❌ | ❓ |
-| Q4 Nestedness (H²/HSS) | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❌ | ❓ |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| O1 Toeplitz-like (rang dépl. ≤ 2) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| O2 Cauchy-like (rang dépl. ≤ 1) | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
+| **P1** Rang Hankel global fini | ❌ | ❌ | 🟡 | 🟡 | ❓ | ❓ |
+| P3 Décroissance HSV exponentielle | 🟡 | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| **P4** Ordre minimal n borné par domaine | ❓ | ❓ | ❓ | 🟡 | ❓ | ❓ |
+| Q2 Rang local blocs admissibles k faible | ❓ | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| Q4 Nestedness (H²/HSS) | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
 
-**Patterns** : Ho-Kalman favorise les SSM (Mamba) et conv (Hyena) qui ont une **réalisation d'état explicite et bornée**. Pour DT (dense), HSV ne décroit pas → projet ASP repose sur l'**hypothèse** que sur des données structurées HSV décroit empiriquement. **Nestedness reste un point d'interrogation pour TOUS — peu d'études existent**.
+> **Pattern attendu** : DINOv2 candidat le plus fort pour H-matrices (vision spatiale → blocs admissibles). Cauchy-like (O2) reste un point d'interrogation universel — **opportunité de découverte si trouvé**. Nestedness (Q4) = vraie inconnue partout — **information maximale si mesuré**.
 
-### Tableau 5 — Mercer / RKHS (R)
+### Tableau 5 — Mercer / RKHS (R) — discriminant null pour Oracles denses
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| **R1** Positive-définitude Mercer | ❌ (softmax non-PD) | ✅ (kernel φφ^T) | ✅ | 🔴 | 🔴 | 🔴 | ❌ | 🔴 |
-| R3 Stationnarité K(x-y) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| R4 Bochner (FT μ ≥ 0) | ❌ | 🟡 | ✅ | ❌ | ❌ | 🟡 | ❌ | ❌ |
-| R6 Approximable par RFF | 🔴 | ✅ | ✅ (par construction) | ❌ | ❌ | 🟡 | ❌ | ❌ |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **R1** Positive-définitude Mercer | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| R3 Stationnarité K(x-y) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| R4 Bochner (FT μ ≥ 0) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-**Patterns** : Linear Attention et Performer SONT des kernels Mercer par construction (φ(x)φ(y)^T). Les autres ne respectent PAS Mercer (softmax dense fait des produits négatifs après normalisation). **R1 est LE test discriminant kernel-based vs autre**.
+> **Pattern** : aucune attention softmax dense n'est Mercer-PD (softmax fait des produits qui ne sont pas garantis ≥ 0 après normalisation). Ces tests sont des **invalidations attendues uniformes** — utiles comme contrôle (toute mesure ≠ ❌ = bug ou découverte majeure).
 
-### Tableau 6 — Cross-layer / cross-head (H, I) + dynamiques (F)
+### Tableau 6 — Cross-layer (H) / Cross-head (I) / Dynamiques (F) — incertitudes maximales
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| H3 Évolution rang croissante avec ℓ | 🟢 | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
-| I1 Diversité inter-heads forte | 🟢 | 🟡 | 🟡 | 🟡 | 🟡 (un état/head) | 🟡 | 🟢 | 🟢 |
-| I2 Spécialisation des heads | 🟢 | ❓ | ❓ | ❓ | 🟢 | ❓ | ❓ | ❓ |
-| **F1** Lipschitzness vs entrée | 🟡 (softmax) | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 | 🟡 (LSH break) |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| H1 Résidu inter-layers décroissant | ❓ | 🟢 | ❓ | ❓ | ❓ | ❓ |
+| **H3** Évolution rang croissante avec ℓ | 🟢 | 🟢 | ❓ | ❓ | ❓ | 🟡 |
+| H4 Convergence vers stationnaire | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
+| **I1** Diversité inter-heads forte | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| I2 Spécialisation heads | 🟢 | 🟢 | 🟢 (syntaxe vs sémantique) | 🟢 (positions vs contenu) | 🟢 | 🟢 |
+| I3 Cluster heads visibles | 🟡 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| **F1** Lipschitzness vs entrée | 🟡 | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| F2 Stabilité temporelle (A_t ≈ A_{t+1}) | 🟡 | 🟡 | 🔴 | n/a (pas séq.) | n/a | 🟡 |
 
-**Patterns** : ces propriétés sont **mal documentées** dans la littérature, beaucoup d'incertitudes. C'est précisément où la batterie Partie 1 apporterait du nouveau. Les SSM/conv ont une Lipschitzness explicite (linéaires), DT est non-Lipschitz à cause de softmax data-dep.
+> **Pattern attendu** : la spécialisation des heads (I2) doit être **forte partout** mais sur des dimensions différentes (syntaxe/sémantique pour LLM, position/contenu pour ViT, structure secondaire pour ESM). Les évolutions cross-layer restent **majoritairement inconnues** — gain d'info maximal.
 
-### Tableau 7 — Markov (J), équivariances (T), butterfly/sparse (U)
+### Tableau 7 — Topologiques (K) / Fréquentielles (L) / Markov (J) / Comparatives (N)
 
-| Propriété | DT | LA | PF | LF | MB | HY | BB | RF |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| J1 Markov-ness propre (A^k cv) | 🟡 | 🟡 | 🟡 | ❓ | 🟢 | 🟡 | 🟡 | 🟡 |
-| **T1** G-équivariance (translation) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (conv) | ❌ | ❌ |
-| T3 Circulante (G = C_n) | ❌ | ❌ | ❌ | ❌ | ❌ | 🟡 (cyclic conv) | ❌ | ❌ |
-| **U1** Butterfly (FFT-like) | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ (conv = FFT) | ❌ | ❌ |
-| U2 Monarch | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| J1 Markov-ness (A^k convergence) | 🟡 | 🟡 | 🟡 | 🟢 | 🟡 | 🟡 |
+| J2 Distribution stationnaire informative | ❓ | ❓ | ❓ | 🟢 | ❓ | ❓ |
+| K1 Spectre Laplacien graphe interp. | ❓ | ❓ | ❓ | 🟢 | ❓ | ❓ |
+| K2 Persistent homology (TDA) signature | ❓ | ❓ | ❓ | ❓ | ❓ | ❓ |
+| K4 Communautés / clustering tokens | 🟢 (digit/op/noise) | 🟢 (parts of speech) | 🟢 (syntaxe) | 🟢 (objets) | 🟢 | 🟢 (résidus) |
+| L1 FFT 2D structure | ❓ | ❓ | ❓ | 🟢 (vision spatiale) | ❓ | ❓ |
+| L3 Quasi-périodicité | ❓ | 🟡 | 🟡 (boucles) | 🟢 (textures) | ❓ | 🟢 (motifs) |
+| **N1** F-divergence Oracle/student | n/a | n/a | n/a | n/a | n/a | n/a |
 
-**Patterns** : Hyena domine sur équivariance translation + butterfly (parce que c'est une convolution). Les autres ne sont pas équivariants par construction.
+> **Patterns attendus** :
+> - **Communautés (K4)** : tous les Oracles doivent montrer des clusters de tokens correspondant à leur structure linguistique/spatiale.
+> - **Wavelets/FFT (L)** : DINOv2 candidat fort pour structure périodique (textures, motifs visuels).
+> - **N (comparatives)** : non applicable tant qu'on n'a pas de student — vivra plus tard quand l'ASP existera.
+
+### Tableau 8 — Conditionnelles à l'entrée (M) — la dimension naturelle de notre projet
+
+| Propriété | OR | LL | SC | DV | CL | ES |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| **M1** Sensitivity par type de token | ✅ (digit/op/noise) | 🟢 (mots-clés) | 🟢 (keywords/operators) | 🟢 (CLS vs patches) | 🟢 | 🟢 (acides aminés) |
+| **M2** Variation A vs paramètres de stress | ✅ (mesuré phase 1.5) | ❓ (à mesurer) | ❓ | ❓ | ❓ | ❓ |
+
+> **Pattern** : c'est la dimension **la plus directement utile pour ASP** — comprendre comment l'attention varie selon le type d'input permet de prédire le rang requis. **À tester systématiquement sur tous les Oracles**.
 
 ---
 
-## 4. Synthèse — Signatures attendues par classe d'Oracle
+## 4. Synthèse — Signatures attendues par domaine
 
-| Oracle | Signature mathématique attendue | Classe(s) qui le caractérisent |
+| Oracle | Signature mathématique attendue | Hypothèses de classes |
 |---|---|---|
-| **DT** (dense) | Non-linéaire, non-PD, rang effectif faible empirique mais pas borné théorique, pas d'invariant structurel exploitable a priori | "Aucune classe pure" → besoin d'arguments empiriques (faible rang sur distribution réaliste) |
-| **LA** (linear) | Mercer + Hankel-finite + Lipschitz | **R1, P1, F1** — kernel + state-space hybride |
-| **PF** (Performer) | Mercer + RFF + Hankel-finite | **R1, R6, P1** — kernel approximation pure |
-| **LF** (Linformer) | Low-rank global strict | **B(rang≤k)** — projection construction |
-| **MB** (Mamba) | Linéaire en x + Ho-Kalman + Lipschitz + ordre minimal d | **G5, P1-P4, F1** — state-space |
-| **HY** (Hyena) | Toeplitz + Butterfly/FFT + Equivariant | **B1, O1, T1, U1** — convolution longue |
-| **BB** (BigBird) | Sparse-block | **B4, B5** — sparse hybride |
-| **RF** (Reformer) | Sparse + bucket clustering | **B4, B5** (local par bucket) |
+| **OR** SMNIST V1 | r_eff faible structuré, M1/M2 forts (par construction du SSG), pas d'invariant structurel pur | Référence empirique connue |
+| **LL** Llama (texte) | r_eff modéré, I2 forte (heads spécialisées syntaxe/sémantique), évolution rang cross-layer croissante, sensibilité aux mots-clés | "Mixed" — pas de classe pure |
+| **SC** StarCoder (code) | r_eff plus haut (logique précise), sparsité + block (fonctions), F2 faible (transitions abruptes) | Sparse + précis |
+| **DV** DINOv2 (vision pure) | r_eff faible, block-diag fort (patches voisins), Lipschitz forte, candidat **H-matrix/HSS** | Hiérarchique-spatial |
+| **CL** CLIP (multimodal) | Hybride DV + texte, attention cross-modal asymétrique | Hybride |
+| **ES** ESM-2 (protéines) | Bandedness forte (interactions locales aa), motifs périodiques (structures secondaires), I2 forte (acides hydrophobes/polaires) | Bandedness + motifs |
 
----
+## 5. Tests les plus discriminants pour ce panel
 
-## 5. Incertitudes principales (zones de découverte potentielle maximale)
+| Test | Discrimination attendue |
+|---|---|
+| **A1** r_eff par fenêtre | DV (très bas) ↔ SC (modéré) ↔ LL/CL/ES (intermédiaire) |
+| **B5** Block-diagonality | DV/SC (forte) ↔ LL/CL/ES (faible) |
+| **B6** Bandedness | ES (forte) ↔ autres (modérée) |
+| **F1** Lipschitzness | DV (forte) ↔ SC (faible) ↔ autres (modérée) |
+| **K4** Communautés/clustering | tous forts mais sur dimensions différentes |
+| **L1/L3** Périodicité fréquentielle | DV/ES (fort) ↔ LL/SC (faible) |
+| **M1/M2** Conditionnelles aux types d'entrée | tous forts — **dimension la plus utile pour ASP** |
 
-1. **Nestedness (Q4)** — peu de littérature mesurant cette propriété sur des opérateurs d'attention réels. **Vraie inconnue.** Aucune intuition pour aucun Oracle.
-2. **Évolution rang cross-layer (H3)** — peu d'études systématiques. Hypothèse courante : "rang croit avec ℓ" mais pas mesuré rigoureusement.
-3. **Markov-ness fine (J1-J4)** — interpréter A comme matrice de transition est mathématiquement valide mais peu exploré pour les attentions.
-4. **Toutes les catégories K (TDA), L (wavelets), V (pseudo-différentiel)** — zéro intuition empirique. Tests vraiment expérimentaux.
-5. **Cauchy-like (O2)** — aucun Oracle classique ne tombe ici a priori. Si on en trouve, c'est une découverte de classe non-explorée.
+## 6. Tests à faible discrimination (uniformes pour tous denses)
 
----
+- **Tous G** (algébriques) — denses sont toutes pareilles ici
+- **Tous R** (Mercer) — denses échouent toutes uniformément
+- **Stochasticité ligne** — toutes la respectent (sauf bug)
 
-## 6. Falsifiabilité de mes paris
+→ Ces tests servent de **contrôle de validation de la batterie** (résultat attendu uniforme = check de bon fonctionnement).
 
-Si la batterie Partie 1 contredit mes paris **discriminants** :
+## 7. Incertitudes principales (zones de découverte potentielle maximale)
+
+1. **Q4 Nestedness** — aucune intuition pour aucun Oracle dense. Vraie inconnue.
+2. **H3, H4** Évolution cross-layer — peu mesuré au-delà de Llama-like.
+3. **K (TDA)** — TDA sur attentions est peu exploré en littérature.
+4. **L (wavelets)** — analyse multi-échelle de A pas dans la littérature standard.
+5. **O2 Cauchy-like** — si trouvé sur un Oracle dense, c'est une découverte de classe non explorée.
+6. **P (Ho-Kalman) sur DT** — théoriquement DT est non-LTI, mais HSV peuvent être bornés empiriquement sur distribution réaliste.
+
+## 8. Falsifiabilité de mes paris
 
 | Pari pré-enregistré | Si invalidé → conclusion |
 |---|---|
-| Hyena est Toeplitz/Butterfly | Architecture Hyena mal comprise théoriquement OU implementations divergent de la spec |
-| Performer est Mercer-PD empiriquement | Bug d'implem ou approximation pire que théorique |
-| DT a rang effectif borné indépendamment de N | Résultat MAJEUR — justifie ASP dans cette direction |
-| MB/HY sont vraiment linéaires en x | Si non → softmax-like component caché ou data-dep non documenté |
-| Tous les Oracles ont r_eff faible empiriquement | Si non → surprise majeure, remet en cause toute la motivation des sub-quad |
-
-**Valeur scientifique** : tester la batterie produit de la connaissance dans tous les cas — soit on confirme l'état de l'art (utile comme benchmark formel), soit on découvre un écart théorie/pratique (publiable).
+| DV a r_eff le plus faible des 6 | Hypothèse "vision = low-rank empirique" remise en cause |
+| SC a r_eff le plus haut des 6 | Hypothèse "code = précis donc plein-rang" remise en cause |
+| Tous échouent R1 Mercer | Si un passe → bug ou découverte majeure |
+| ES a bandedness forte | Si non → interactions long-distance dominent dans ESM-2 |
+| K4 communautés visibles partout | Si non → pas de structure latente cohérente dans ces Oracles |
 
 ---
 
-## 7. Patterns transversaux remarqués
-
-### Test discriminants identifiés (un seul OUI/NON suffit à classer)
-
-- **G5 Linéarité** : sépare {MB, HY} des autres
-- **R1 Mercer** : sépare {LA, PF} des autres
-- **B1/O1 Toeplitz** : isole {HY}
-- **Rang global borné** : isole {LF}
-- **Sparsité** : sépare {BB, RF} des denses
-
-### Tests redondants (corrélés à un autre)
-
-- B2 (rang Hankel local faible) corrélé à A1 (r_eff par fenêtre)
-- A3, A4, A5, A6 (spectraux) corrélés entre eux
-- T1 et U1 (équivariance translation et butterfly) corrélés via convolution
-
-### Tests à fort gain d'information (incertitude haute)
-
-- Q4 (nestedness) — vraiment inconnu
-- H3 (évolution rang cross-layer) — peu mesuré
-- K (TDA), L (wavelets) — toutes propriétés
-- N (comparatives Oracle/student) — non encore évaluable
-
----
-
-## 8. Confrontation aux résultats (à compléter post-batterie)
-
-Cette section reste vide jusqu'à ce que la batterie soit exécutée. Format proposé :
+## 9. Confrontation aux résultats (à compléter post-batterie)
 
 | Pari | Mesure réelle | Verdict | Surprise ? |
 |---|---|---|---|
 | (à remplir) | | | |
 
-Score global sur 70 paris discriminants : **/70 paris validés** — à mesurer.
+Score global discriminant : **/35 paris testables** (cellules 🟢/🔴/✅/❌ ; on exclut 🟡/❓ qui sont par nature non-falsifiés strictement).
 
 ---
 
 ## Liens
 
 - **Catalogue Partie 1** : [00b_classification_proprietes.md](00b_classification_proprietes.md)
+- **Sélection Oracles + protocole d'entrées** : [00d_oracles_battery.md](00d_oracles_battery.md)
 - **Cadrage projet** : [00_vision.md](00_vision.md)
-- **Roadmap batterie** : [../ROADMAP.md](../ROADMAP.md) section "Stage 1.5+ — Classification mathématique étendue"
-- **Carnet** : [carnet_de_bord.md](carnet_de_bord.md) (entrée 2026-05-11 ~11:00)
+- **Roadmap batterie** : [../ROADMAP.md](../ROADMAP.md) section "Stage 1.5+"
+- **Carnet** : [carnet_de_bord.md](carnet_de_bord.md) (entrée 2026-05-11 11:30)

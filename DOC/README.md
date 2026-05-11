@@ -13,7 +13,8 @@
 |---|----------|--------|-------|
 | 0 | [00_vision.md](00_vision.md) | — | Thèse, hypothèses, livrable (centré Partie 2 / ASP) |
 | 0b | **[00b_classification_proprietes.md](00b_classification_proprietes.md)** | **1** | **Catalogue mathématique exhaustif (~70 propriétés sur 18 catégories A-V)** |
-| 0c | [00c_predictions_signatures.md](00c_predictions_signatures.md) | **1** | Paris a priori (pré-enregistrés) sur les signatures attendues de 8 Oracles classiques (DT/LA/PF/LF/MB/HY/BB/RF) — falsifiable contre la batterie 00b |
+| 0c | [00c_predictions_signatures.md](00c_predictions_signatures.md) | **1** | Paris a priori (pré-enregistrés) sur les signatures attendues de 6 Oracles **denses diversifiés par domaine** (OR/LL/SC/DV/CL/ES) — falsifiable contre la batterie 00b |
+| 0d | [00d_oracles_battery.md](00d_oracles_battery.md) | **1** | Sélection précise des 6 Oracles denses + protocole d'entrées standardisé par domaine + procédure d'exécution + format de rapport |
 
 ### Phases ASP (Partie 2)
 | # | Document | Phase | Objet |
