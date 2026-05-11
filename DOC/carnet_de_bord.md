@@ -40,6 +40,36 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 10:15 UTC — Cadrage final consolidé : projet à 2 livrables distincts
+**#decision #clarification** Affinage du recadrage 10:10 par utilisateur. Le projet ASP a **deux livrables distincts**, à ne pas confondre :
+
+**Partie 1 — Science fondamentale (le cœur, la valeur réutilisable)** :
+- Étude spectrale complète des propriétés mathématiques des attentions (Oracle dense + attentions synthétiques).
+- Livrable : **classification mathématique** + **batterie de tests** caractérisant comment se comportent différents Oracles d'attention.
+- **Réutilisable par toute la communauté**, pas spécifique au projet polymorphique.
+- Ne peut pas "fail" : chaque phase fournit une donnée à la classification, positive ou négative.
+
+**Partie 2 — Validation d'hypothèse (l'application)** :
+- Vérifier si l'attention polymorphique (allocation dynamique de rang via signal observable) est viable et cohérente.
+- Livrable : verdict OUI/NON sur cette hypothèse spécifique, conditionné à la classification de la Partie 1.
+
+**Lecture des phases dans ce cadre** :
+| Phase | Apport Partie 1 (science) | Apport Partie 2 (polymorphique) |
+|---|---|---|
+| 1 | Méthodologie calibration Oracle/SSG | Référence comparaison |
+| 1.5 | Donnée : existe-t-il un signal local de stress structurel sur ce type d'Oracle ? | Si oui → polymorphique faisable. Si non → polymorphique pas dans cette direction. |
+| 2 | Caractérisation spectrale (SCH) | Donnée pour Spectromètre |
+| 3 | Catalogue de structures paramétrables | Construction ASPLayer |
+
+**Conséquence pour Run 2 + Run 3 (en cours/à venir)** :
+- Verdict NO-GO ou GO, peu importe → **donnée empirique pour la classification scientifique** (Partie 1, valeur réutilisable).
+- Verdict NO-GO → invalidation hypothèse polymorphique-via-allocation-guidée dans ce cadre (Partie 2). Pas la fin du monde, juste un résultat scientifique.
+- Verdict GO → poursuite phase 2 sur la voie polymorphique + alimentation classification.
+
+**Why ce double-cadrage** : éviter la dérive narrative "phase 1.5 NO-GO = projet mort". Le projet réussit dès qu'il **caractérise précisément** ce qui marche et ce qui ne marche pas. La Partie 1 est inattaquable méthodologiquement ; la Partie 2 est conditionnelle.
+
+**How to apply** : pour la rédaction du rapport phase 1.5, séparer explicitement les deux narratifs : (1) ce qu'on apprend sur les attentions en général, (2) ce qu'on conclut spécifiquement sur l'hypothèse polymorphique. Pour les conversations futures (et la mémoire), toujours tenir ce double-cadrage.
+
 ### 2026-05-11 10:10 UTC — Clarification de cadrage : phase 1.5 ≠ test existentiel du projet
 **#decision #clarification** Suite à dérive narrative (j'ai présenté phase 1.5 comme "LE test existentiel du projet"), recadrage explicite par l'utilisateur :
 
