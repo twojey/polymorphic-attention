@@ -111,27 +111,48 @@ def _load_oracle(
 
 def _calibrate_kl_baseline(
     oracle: OracleTransformer, vocab: Vocab, *, n_examples: int, seed: int,
-    omega_max: int = 0, delta_max: int = 0, batch_size: int = 16,
+    omega_max: int = 0, delta_max: int = 0, batch_size: int | None = None,
 ) -> GlobalKLBaseline:
     """Calibre le baseline KL sur séquences-bruit.
 
     Si bench seq_len variable (omega_max/delta_max > 0), on génère le bruit
-    à seq_len max (formule SSG : 1 + (2+2δ)·ω + 1 + δ + 1) avec entropy=1.0
-    (bruit pur, ℋ saturée). À l'usage, compute_s_kl slice la baseline au
-    seq_len du batch + renormalise. Cf. carnet 2026-05-11 décision option C.
+    à seq_len_target = formule_SSG(omega_max, delta_max) MAIS avec ω=0 et
+    δ=seq_len_target-3 pour avoir une baseline VRAIMENT sans structure
+    récursive (juste digits + distracteurs NOISE). À l'usage, compute_s_kl
+    slice la baseline au seq_len du batch + renormalise.
+    Cf. carnet 2026-05-11 décision option C + correctif TROU #5.
 
-    Si omega_max=0 et delta_max=0 (défaut historique), on reste sur ω=0, Δ=0,
-    entropy=0.5 (comportement V1 pour bench à seq_len fixe).
+    Si omega_max=0 et delta_max=0 (défaut historique), comportement V1
+    pour bench à seq_len fixe (ω=0, δ=0, entropy=0.5).
+
+    batch_size : si None, adaptatif selon seq_len pour éviter OOM
+    (cf. TROU #7 — peak ~B*L*H*N²*8 bytes par batch, doit rentrer en RAM).
     """
     if omega_max > 0 or delta_max > 0:
-        cfg = StructureMNISTConfig(
-            omega=omega_max, delta=delta_max, entropy=1.0, n_examples=n_examples,
-            n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
-        )
+        # Calculer seq_len cible (formule SSG ligne 152 structure_mnist.py)
+        seq_len_target = 1 + (2 + 2*delta_max)*omega_max + 1 + delta_max + 1
+        # Baseline propre : ω=0 (pas de structure récursive) + δ ajusté pour
+        # atteindre seq_len_target. Avec ω=0, formule = 3 + δ → δ = target - 3.
+        cal_omega, cal_delta = 0, seq_len_target - 3
+        cal_entropy = 1.0    # bruit pur (ℋ saturée)
     else:
-        cfg = StructureMNISTConfig(
-            omega=0, delta=0, entropy=0.5, n_examples=n_examples,
-            n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
+        cal_omega, cal_delta, cal_entropy = 0, 0, 0.5
+        seq_len_target = 3
+
+    cfg = StructureMNISTConfig(
+        omega=cal_omega, delta=cal_delta, entropy=cal_entropy, n_examples=n_examples,
+        n_ops=vocab.n_ops, n_noise=vocab.n_noise, seed=seed,
+    )
+
+    # batch_size adaptatif : cible peak ~30 GB par batch (B*L*H*N²*8 ≤ 30e9)
+    # Avec L=6, H=8 fixes : B ≤ 30e9 / (6*8*N²*8) = 78M / N²
+    if batch_size is None:
+        L_assumed, H_assumed = 6, 8
+        max_batch = max(1, int(30e9 / (L_assumed * H_assumed * seq_len_target**2 * 8)))
+        batch_size = min(16, max_batch)
+        print(
+            f"  Calibration baseline : seq_len={seq_len_target}, batch_size={batch_size} "
+            f"(adaptatif pour rester sous 30 GB/batch)", flush=True
         )
     ds = StructureMNISTDataset(cfg)
     loader = DataLoader(ds, batch_size=batch_size, collate_fn=_make_padded_collate(vocab.PAD))

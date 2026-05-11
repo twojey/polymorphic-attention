@@ -40,6 +40,29 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 09:55 UTC — REVISION : option STRICTE pour phase 1.5 V1 (annule Run 3)
+**#decision** Audit conformité Run 3 vs DOC/01b a révélé **plusieurs trous** par rapport au protocole pré-enregistré :
+- S_Grad jamais calculé (jamais codé en V1) → spec §1 demande les 3 signaux
+- Mes modifs S_KL (option C : slice+renorm + baseline ω=0/δ=N-3) constituent une **modification du signal** vs protocole pré-enregistré (§8.1 dit "calibrer une fois pour toutes")
+- Bench réduit Δ∈[16,64,256] vs spec {64,256,1024,4096} — justifié par max_seq_len modèle (=8192) et training Oracle ω≤8
+
+**Re-lecture clé de la spec** : §8 piège 5 dit explicitement "**soit on exclut S_Grad de la liste finale**, soit on apprend un proxy" → l'exclusion de S_Grad est **anticipée et autorisée** par la spec elle-même. Pas un trou critique.
+
+**Décision finale option STRICTE** (vs option AMENDÉE option C précédemment retenue) :
+- **Annuler Run 3** sous sa forme actuelle (S_KL adapté + S_Spectral). Killed : watchdog auto-launch (PID 29190 sur pod) et smoke S_KL (PID 30931, déjà mort de lui-même).
+- **Conclure phase 1.5 V1 sur Run 2** seul (S_Spectral pur sur bench complet Δ∈[16,64,256], en cours).
+- **S_Grad et S_KL** explicitement reportés à un Sprint dédié (re-train Oracle multi-axe + adaptation propre).
+
+**Pourquoi STRICTE plutôt qu'AMENDÉE** : "résultats clairs et solides" exige que le verdict soit purement basé sur le protocole pré-enregistré. Mélanger 1 signal en spec stricte et 1 signal en amendement complique la défense scientifique. Un verdict 1/3 signaux pur > un verdict 2/3 signaux dont 1 sous amendement.
+
+**Verdict scientifique attendu (selon Run 2)** :
+- Si S_Spectral GO : phase 1.5 V1 → **GO** (§4.3 multi-signal "au moins un signal" → 1/3 suffit). Phase 2 ouverte.
+- Si S_Spectral NO-GO : phase 1.5 V1 → **NO-GO** net. Conclusion : "Dans cadre Oracle SMNIST V1 + bench réduit, S_Spectral n'est pas un signal d'allocation valide. S_KL/S_Grad nécessitent Sprint dédié pour être testables." Le projet décide alors : continuer ou arrêter.
+
+**Code conservé** : les modifs option C (s_kl.py slice+renorm, run.py `_calibrate_kl_baseline` adapté avec ω=0/δ=N-3 et batch_size adaptatif) restent dans le repo, mais ne sont pas activées en V1. Disponibles pour Sprint S_KL futur sans avoir à recoder.
+
+**How to apply** : status quo Run 2 (déjà lancé, en cours), ne rien faire de plus.
+
 ### 2026-05-11 09:25 UTC — Adaptation S_KL au seq_len variable (option C)
 **#decision** Pivot pod CPU RunPod (32 vCPU, 251 GB RAM) lancé ce matin pour relancer phase 1.5 avec speedup ~10× vs VPS. Trois runs planifiés en séquence sur le pod :
 - **Run 1** (08:31→09:14, terminé) : Δ∈[16,64], `s_kl.enabled=false`. Verdict **NO-GO** (MLflow `5e5ead1e`).
