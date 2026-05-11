@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **V1 : test S_Spectral seul** (option STRICTE 2026-05-11 09:55). S_Grad exclu (§8 piège 5 anticipe). S_KL reporté Sprint dédié. Run 1 NO-GO sur Δ≤64 (MLflow `5e5ead1e`, ρ_Δ=0.7043 ✅, ρ_ℋ=0.2453 ❌). Run 2 (S_Spectral sur Δ∈[16,64,256]) en cours sur pod, fin ~10:45-11:45. **Verdict V1 = celui de Run 2.** Sprint S_KL/S_Grad : à cadrer si NO-GO Run 2. |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **V1 : 2/3 signaux** (option AMENDÉE finale 2026-05-11 10:00). S_Grad exclu (§8 piège 5 anticipe). Run 1 NO-GO Δ≤64 (MLflow `5e5ead1e`, ρ_Δ=0.7043 ✅, ρ_ℋ=0.2453 ❌). Run 2 (S_Spectral pur sur Δ∈[16,64,256]) en cours, fin ~10:45-11:45. Run 3 (S_KL option C sous amendement V1.5) auto-lancé après Run 2. **Verdict V1 = combinaison Run 2 (S_Spectral) + Run 3 (S_KL amendé)**. |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -39,6 +39,23 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-11 10:00 UTC — RE-REVISION : retour à option AMENDÉE (Run 3 réactivé)
+**#decision** Suite à challenge utilisateur ("on aura un signal complet ?"), reconnaissance que l'option STRICTE actuelle laisse H2 globalement à 1/3 signaux testés — c'est aussi un trou, juste d'un autre type. L'amendement option C pour S_KL est **mathématiquement défendable** (slice + renormalize d'une distribution = reste une distribution ; baseline ω=0/δ=N-3 = vraie noise sans structure).
+
+**Arbitrage final** : garder le verdict S_Spectral pur (Run 2) ET ajouter Run 3 avec S_KL sous amendement documenté = **2/3 signaux testés**, dont un sous protocole strict et l'autre sous amendement V1.5 explicite.
+
+**Run 3 réactivé** :
+- Wrapper `/root/run3_skl.sh` recréé avec améliorations TROU #5 (baseline ω=0+δ=N-3) et TROU #7 (batch_size adaptatif anti-OOM).
+- Override `s_kl.baseline.n_calibration_examples=256` (vs default 1024) pour réduire calibration à ~30-60 min au lieu de 5h+.
+- Watchdog PID 33693 re-armé : attend PID 2283 (wrapper Run 1+2) → lance Run 3 quand Run 2 finit.
+
+**Why ce revirement** : "résultats clairs et solides" inclut "complétude raisonnable de H2", pas seulement "verdict pur sur 1 signal". Mieux vaut un verdict 2/3 dont 1 sous amendement DOCUMENTÉ qu'un verdict 1/3 pur. Tant que l'amendement est explicité dans le rapport phase 1.5, la science reste défendable.
+
+**État final** :
+- Verdict S_Spectral : Run 2 (en cours), pré-enregistré pur.
+- Verdict S_KL : Run 3 (à lancer auto post-Run 2), sous amendement V1.5 (option C).
+- Verdict S_Grad : exclu §8 piège 5 (anticipé spec).
 
 ### 2026-05-11 09:55 UTC — REVISION : option STRICTE pour phase 1.5 V1 (annule Run 3)
 **#decision** Audit conformité Run 3 vs DOC/01b a révélé **plusieurs trous** par rapport au protocole pré-enregistré :
