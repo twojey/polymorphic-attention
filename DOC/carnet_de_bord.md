@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **mixte selon bench** : pod-large (Δ≤256) ρ_Δ=0.6973 borderline ; VPS-réduit (Δ≤64) smoke 32ex ρ_Δ=0.7655. 2000-ex VPS en cours, fin ~01:35 |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **partiel — NO-GO Run 1 (S_KL off)** : pod CPU 2026-05-11, bench réduit Δ≤64 sur 2000 ex → NO-GO confirmé sur S_Spectral+S_Grad (MLflow `5e5ead1e`). Run 2 (Δ étendu, S_KL off) et Run 3 (Δ étendu, S_KL adapté) en queue sur pod. Verdict H2 complet : après Run 3. |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -142,6 +142,20 @@ Idem ci-dessus, redondant — à fusionner après le run.
 ---
 
 ## Surprises et pièges (chronologique inverse)
+
+### 2026-05-11 — Phase 1.5 Run 1 NO-GO confirmé sur bench réduit (2000 ex, Δ∈[16,64])
+**#milestone #surprise** Premier run 2000-ex sur pod CPU RunPod (32 vCPU Threadripper 7960X) avec bench réduit hérité de la contrainte VPS. Durée wall-clock : **43:17** (08:31:16 → 09:14:33 UTC). Verdict : **NO-GO**, message du driver : "Aucun signal ne passe les critères. Arrêt du protocole." MLflow run `5e5ead1e18154317858cf60eec67bdb3` dans expérience 3.
+**Lecture** :
+- Différence importante avec le smoke 32-ex pré-pivot (ρ_Δ=0.7655, borderline supérieur) → le signal ne tient pas à n croissant.
+- Cohérent avec la tendance du run pod-large 500-ex de 2026-05-10 (ρ_Δ=0.6973, borderline inférieur) : sur bench réduit ET étendu, ρ converge sous 0.70 quand n augmente.
+- Mais : `s_kl.enabled=false` sur ce run → trou méthodo identifié post-Run 1 (cf. décision option C 2026-05-11 09:25). H2 partiellement testée.
+**Leçon** : (1) à ce stade, sur Δ∈[16,64] avec 2000 ex, S_Spectral et S_Grad ne suffisent pas individuellement à passer le seuil 0.70 ; (2) attendre Run 2 (Δ étendu) + Run 3 (S_KL adapté) avant verdict global H2.
+
+### 2026-05-11 — Découverte S_KL × seq_len variable bloque test complet H2
+**#bug #surprise** Le code phase 1.5 V1 désactive S_KL si bench seq_len variable (baseline calibrée à seq_len fixe ne broadcast pas). Or H2 demande "**au moins un** signal parmi {S_KL, S_Grad, S_Spectral}" → tester seulement 2/3 signaux n'est pas un test complet de H2. Identifié pendant Run 2 (avant qu'il finisse), après pivot pod où la commande `s_kl.enabled=false` a été reprise par copier-coller sans réinterroger le contexte.
+**Cause technique** : `seq_len = 1 + (2+2δ)·ω + 1 + δ + 1` (formule SSG), donc seq_len dépend de ω ET Δ. Bench cross-(ω,Δ) → seq_len variable → baseline shape mismatch.
+**Fix** : option C choisie (cf. décision 2026-05-11 09:25) — adaptation `compute_s_kl` slice+renormalize, baseline calibrée à seq_len max avec entropy=1.0.
+**Leçon** : changer de hardware (VPS → pod) doit déclencher une revue systématique des choix qu'on traînait — pas juste accélérer le même protocole. Trou méthodo aurait pu être identifié au moment du pivot.
 
 ### 2026-05-11 — Deadlock BLAS multi-thread dans compute_s_spectral eigvalsh
 **#bug** Run 2000-ex lancé 2026-05-10 17:35 s'est accroché pendant ~38h dans `torch.linalg.eigvalsh(M_reg)` (phase1b_calibration_signal/signals/s_spectral.py:98). Analyse stack: 6/9 threads en `futex_wait` (lock contention BLAS). Cause : OpenBLAS/MKL multi-thread avec plusieurs threads attendant une ressource partagée dans l'eigvalsh kernel.
