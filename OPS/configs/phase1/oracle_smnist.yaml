@@ -63,3 +63,7 @@ extraction:
   store_per_layer: true
   store_per_head: true
   store_per_example: true
+  # --- V2 (run_extract.py) ---
+  output_dir: /tmp/phase1_extract_v2   # dumps locaux .pt avant upload MLflow
+  batch_size_cap: 8                    # plafond batch_size adaptatif (cf. _adaptive_batch_size)
+  target_peak_gb: 15.0                 # budget pic FP64 attention pour le batch adaptatif

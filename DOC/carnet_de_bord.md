@@ -40,6 +40,50 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-11 ~16:30 UTC — V2 driver phase 1 (run_extract.py) : debug + tests pytest
+
+**#decision #infra** Le squelette V2 (`CODE/phase1_metrologie/run_extract.py`, ~419 lignes, untracked) écrit en préparation phase 2 avait quatre bugs bloquants. Audit + fix + suite pytest (12 tests, passe) en une passe pendant que Run 3 tourne.
+
+**Pourquoi le V2 est nécessaire** :
+- V1 (`run.py`) fait `break` après 1 seul batch (ligne 185) → 4 matrices A extraites seulement.
+- Phase 2 (audit spectral) attend un dump complet `audit_svd` avec stratification par régime (ω, Δ, ℋ) pour évaluer `min_portion` formel (DOC/01 §6 go/no-go).
+- V2 sépare training (V1) et extraction (V2) → on peut régénérer les dumps à partir d'un Oracle déjà entraîné sans re-payer ~4-6 h de training.
+
+**Bugs trouvés et corrigés** :
+
+| # | Bug | Symptôme | Fix |
+|---|---|---|---|
+| 1 | `qpos = batch["query_pos"]` (l.190) — clé absente du `collate` | `KeyError` au premier batch | Importer `find_query_positions` + l'appeler avec `vocab.QUERY`. `_extract_bucket` prend désormais `query_id` en paramètre. |
+| 2 | `hankel_rank_numerical(A, tau=…)` censé retourner `(B,H)` mais retourne un **scalaire** (reduction par défaut = mean). Le code l.258 fait `hk[b]` → `IndexError`. | `IndexError` au premier log MLflow per-régime | Renommé `_log_per_regime_metrics` → `_log_bucket_metrics`. Stratification per-(ω,Δ,ℋ) **retirée du log MLflow** : analyse confiée au post-processing à partir des dumps `.pt` (qui embarquent déjà `omegas`/`deltas`/`entropies`). Évite aussi O(L × n_régimes) métriques par bucket. |
+| 3 | `_group_by_seq_len` faisait `item["tokens"].shape[0]` — mais `StructureMNISTDataset.__getitem__` retourne un `StructureMNISTSample` (dataclass), pas un dict. | `TypeError: 'StructureMNISTSample' object is not subscriptable` | `item.tokens.shape[0]` (accès attribut). |
+| 4 | `extraction.output_dir`, `extraction.batch_size_cap`, `extraction.target_peak_gb` : seulement en fallback `OmegaConf.select(...) or default` | Pas de bug mais valeurs implicites → fragile pour overrides Hydra | Ajoutés explicitement dans `OPS/configs/phase1/oracle_smnist.yaml` (section `extraction.*`). |
+
+**Suite pytest ajoutée** (`tests/test_run_extract.py`, 12 tests) :
+- `test_expected_seq_len_matches_ssg[ω=…,Δ=…]` (5 paramétrés) — confronte la formule `(2Δ+2)·ω + Δ + 3` à `StructureMNISTConfig.expected_seq_len()`.
+- `test_adaptive_batch_size_respects_cap` — cap haut, clamp bas (1 minimum), seq_len=0.
+- `test_group_by_seq_len_uniform` / `_mixed` — un seul bucket vs deux régimes ConcatDataset.
+- `test_load_oracle_strips_{fabric,compile}_prefix` — checkpoint avec `_forward_module.` ou `_orig_mod.`.
+- `test_extract_bucket_shapes_dtypes` — pipeline end-to-end (mini Oracle 2 couches × 2 têtes, mini dataset 8 ex) → `(B, H, N, N)` FP64.
+- `test_log_bucket_metrics_logs_two_per_layer` — mock `mlflow.log_metric`, vérifie 2L appels et noms `hankel_rank_seq{N}_layer{ℓ}_mean` / `spectral_entropy_seq{N}_layer{ℓ}_mean`.
+
+Phase 1 complète : **63/63 tests passent** (51 existants + 12 nouveaux), aucune régression.
+
+**Decisions de design notables** :
+- **Pre-grouping par seq_len exact** : le sweep monovariate produit ~11 valeurs distinctes de seq_len (combinaisons ω×Δ). Plutôt qu'un seul DataLoader avec padding hétérogène, on segmente en buckets — chaque bucket a seq_len uniforme → pas de padding gaspillé en FP64 (gain mémoire ~ωΔ_max/ωΔ_typ).
+- **Batch adaptatif par bucket** : `_adaptive_batch_size(seq_len, L, H, target_gb=15.0, cap=8)`. Cap conservateur à 8 car le calcul `B·L·H·N²·8` omet les activations FFN (cf. crash Run 3). Sous-estimer = OK, sur-estimer = OOM.
+- **MLflow minimal** : 2 métriques par couche par bucket (hankel rank + entropie spectrale, mean globaux). Les dumps `.pt` sont l'autorité — toute analyse fine (min_portion, breakdown régime, comparaison cross-tête) se fait en post-processing offline.
+- **Dumps sauvegardés en local puis uploadés MLflow** comme artifacts (1 fichier par bucket seq_len). Permet de re-télécharger sans relancer.
+
+**How to apply** :
+- Pour lancer le V2 après Run 3 + verdict phase 1.5 : `PYTHONPATH=CODE uv run python -m phase1_metrologie.run_extract --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist oracle_checkpoint=/path/to/oracle.ckpt`.
+- L'Oracle ckpt vient de l'artifact MLflow du run phase 1 V1 (`oracle/{run_id}_oracle.ckpt`).
+- Sortie attendue : ~11 fichiers `audit_dump_seq{N}.pt` dans `output_dir` (chacun = un régime seq_len), uploadés sous artifact path `audit_dumps/`.
+- Phase 2 consommera les dumps via la convention déjà documentée (`attn`, `omegas`, `deltas`, `entropies`, `tokens` dans chaque `.pt`).
+
+**Non fait, à faire ensuite** :
+- Le bug `test_s_spectral_uniform_attention_low_rank` (check runtime `OPENBLAS_NUM_THREADS=1`) reste — hygiène, pas bloquant pour Run 3. Fix prévu : convertir en fixture pytest qui set la var.
+- Pas encore testé sur un vrai checkpoint MLflow (Run 3 doit finir avant qu'on ait un Oracle à recharger).
+
 ### 2026-05-11 15:08 UTC — Run 3 (S_KL option C) relancé sur pod CPU + diagnostic 4-runs phase 1.5
 **#decision #milestone #falsifiabilite** Après lecture comparée des 4 runs phase 1.5 finis (1 GO + 3 NO-GO), relance Run 3 (S_KL option C) sur un pod CPU RunPod éphémère pour combler le trou de validation H2.
 
