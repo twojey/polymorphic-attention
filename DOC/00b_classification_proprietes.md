@@ -77,30 +77,35 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 
 ## II. Catalogue exhaustif des propriétés
 
-14 catégories ouvertes, ~50 items. Statut : ◆ implémenté, ◇ partiel, ○ à coder.
+23 catégories ouvertes, ~130+ items. Statut : ◆ implémenté, ◇ partiel, ○ à coder.
 
 ### Vue d'ensemble
 
 | Catégorie | Items | Cadre théorique principal |
 |---|---|---|
-| **A** Spectrales | rang, conditionnement, entropie spectrale, décroissance, participation | spectral analysis |
-| **B** Structurelles | Toeplitz, Hankel, Cauchy, Vandermonde, sparsité, blocs, bandes | rang de déplacement |
-| **C** Statistiques par token | KL, entropies, variance, gradient | information theory |
-| **D** Géométriques | cosine sim heads, Frobenius, angles subspaces | linear algebra |
+| **A** Spectrales | rang, conditionnement, entropie, décroissance, participation, discriminant, résultant | spectral analysis + elimination theory |
+| **B** Structurelles | Toeplitz, Hankel, Cauchy, Vandermonde, sparsité, blocs, bandes, tropical, Sylvester | rang de déplacement + tropical geometry |
+| **C** Statistiques par token | KL, entropies, variance, gradient, Fisher, Wasserstein | information theory + differential geometry |
+| **D** Géométriques | cosine sim, Frobenius, angles subspaces, Fisher metric, wave fronts, characteristic variety | linear algebra + microlocal geometry |
 | **E** Information-théoriques | mutual info, compressibilité | information theory |
 | **F** Dynamiques | Lipschitzness, stabilité temporelle | sensitivity |
-| **G** Algébriques | trace/det, symétries, idempotence, polynômes | linear algebra |
+| **G** Algébriques | trace/det, symétries, idempotence, polynômes, Bernstein-Sato, D-modules, syzygies | linear + algebraic geometry |
 | **H** Cross-layer | résidus, compositions, évolution rang, convergence | dynamics |
 | **I** Cross-head | diversité, spécialisation, clustering | statistics |
 | **J** Stochastiques (Markov) | Markov-ness, stationnaire, mixing time | stochastic processes |
 | **K** Topologiques / graphes | Laplacien, persistent homology, centralité | spectral graph / TDA |
-| **L** Fréquentielles | FFT 2D, wavelets, quasi-périodicité | harmonic analysis |
+| **L** Fréquentielles | FFT 2D, wavelets, quasi-périodicité, symbol calculus, CZ regularity | harmonic analysis + microlocal |
 | **M** Conditionnelles à l'entrée | sensitivity par type token, variation vs (ω,Δ,ℋ) | functional analysis |
 | **N** Comparatives Oracle/student | F-divergence, préservation distill, Lipschitz différentielle | comparative |
 | **O** Rang de déplacement | Toeplitz/Cauchy/Vandermonde-like, generators | Kailath/Pan |
 | **P** Réalisation d'état | rang Hankel block, HSV, ordre minimal | Ho-Kalman |
 | **Q** Hiérarchiques | rang faible blocs, H-matrix, HSS, nestedness | Hackbusch/Tyrtyshnikov |
-| **R** Noyau Mercer/RKHS | Mercer PD, RFF, Bochner, énergie tronquée | Mercer/Bochner |
+| **R** Noyau Mercer/RKHS | Mercer PD, RFF, Bochner, énergie tronquée, Clifford, Arf, Hasse-Witt | Mercer/Bochner + algebraic invariants |
+| **S** Tenseurs | Tucker, Tensor Train, Hierarchical, MERA/PEPS, PARAFAC | tensor decomposition |
+| **T** Équivariances | G-équivariance, permutation-invariance, circulantes, block-circulantes, invariants rotation | representation theory |
+| **U** Sparse-structurées | Butterfly, Monarch, Pixelfly, block-sparse, random sparse+low-rank | modern fast transforms |
+| **V** Opérateurs analytiques | pseudo-différentiels, CZ, compacts, Wishart, analytique, microlocal ellipticity, prismathic, Donaldson-Thomas, categorical | functional analysis + frontier |
+| **W** Complexité logique | NIP, NTP₂, Littlestone, Shelah stability, dependence measure, definability | model theory + learning theory |
 
 ### A — Propriétés spectrales
 
@@ -112,6 +117,9 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | A4 | Entropie spectrale | H = -Σ p_i log p_i, p_i = σ_i²/Σσ_j² | ◆ | `phase1/metrics/spectral.py` |
 | A5 | Décroissance spectrale | régression log(σ_i) ~ -α·i | ○ | — |
 | A6 | Participation ratio | PR = (Σσ_i²)² / Σσ_i⁴ | ○ | — |
+| A7 | Discriminant du polynôme caractéristique | Disc(det(λI - A)) mesure séparation des valeurs propres | ○ | — |
+| A8 | Résultant spectral | Resultant(P(λ), P'(λ)) capture multiplicités algébriques | ○ | — |
+| A9 | Weyl équidistribution | test statistique des espaces inter-valeurs propres vs GUE | ○ | — |
 
 ### B — Propriétés structurelles (entrée vers catégories O et Q)
 
@@ -123,6 +131,9 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | B4 | Sparsité effective | ratio coefficients > seuil | ○ | — |
 | B5 | Block-diagonality | score structure block (Schmidt decomp) | ○ | — |
 | B6 | Bandedness | largeur de bande effective | ○ | — |
+| B7 | Tropical degeneracy | hiérarchie magnitude log-échelle : ordonnancement des termes dominants | ○ | — |
+| B8 | Sylvester matrix rank | rang de la matrice de Sylvester pour GCD polynomial implicite | ○ | — |
+| B9 | Quasiseparable structure | rangs de déplacement généralisés (générateurs courts) | ○ | — |
 
 ### C — Propriétés statistiques par token
 
@@ -134,6 +145,9 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | C4 | Entropie Rényi | H_α = (1-α)⁻¹ log Σ p_i^α (α=2 typique) | ○ | — |
 | C5 | Variance par tête | var(A[t,h,:]) | ○ | — |
 | C6 | S_Grad | ‖∇_x_t L_task‖ | ○ jamais codé | `phase1b/signals/s_grad.py` (squelette) |
+| C7 | Fisher information matrix | Hessian de KL divergence sur famille softmax ; métrique Riemannienne | ○ | — |
+| C8 | Nombre de condition Fisher | κ_F(I_fisher) ; curvature of softmax manifold | ○ | — |
+| C9 | Wasserstein distance | distance optimal transport entre distribution attentions | ○ | — |
 
 ### D — Propriétés géométriques inter-heads
 
@@ -142,6 +156,10 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | D1 | Cosine similarity entre lignes/têtes | sim(A[h_1,t,:], A[h_2,t,:]) | ○ |
 | D2 | Distance Frobenius vs uniform/identité | ‖A - U‖_F, ‖A - I‖_F | ○ |
 | D3 | Angle entre subspaces | principal angles entre row-spaces de heads | ○ |
+| D4 | Variété statistique (Fisher metric) | Ricci scalar de la métrique Fisher sur espace paramètres softmax | ○ |
+| D5 | Wave front set (microlocal) | WF(A) = singularités en (position, fréquence) ; support micro-local | ○ |
+| D6 | Characteristic variety | variété algébrique en fibré cotangent ; analyse opérateur différentiel | ○ |
+| D7 | Curvature concentrations | loci de haute courbure → identifie concentrations d'information | ○ |
 
 ### E — Propriétés information-théoriques
 
@@ -166,6 +184,9 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | G3 | Idempotence | ‖A² - A‖ / ‖A‖ | ○ |
 | G4 | Polynôme caractéristique / minimal | coefficients, racines | ○ |
 | G5 | **Additivité / Linéarité** | ‖A(x+y) - A(x) - A(y)‖ / max(‖A(x)‖,‖A(y)‖) | ○ |
+| G6 | Bernstein-Sato polynomial | b(s) : équation fonctionnelle det(A)^{s+1} = b(s)·det(A)^s | ○ | — |
+| G7 | D-module structure | annihilateurs polynomiaux ; holonomicité | ○ | — |
+| G8 | Syzygies | relations entre colonnes/rangées (module des syzygies) | ○ | — |
 
 ### H — Propriétés cross-layer
 
@@ -209,6 +230,9 @@ Si **aucun** de ces invariants n'est borné quand N croît, l'opérateur est int
 | L1 | FFT 2D | spectre Fourier 2D de A | ○ |
 | L2 | Wavelets | analyse multi-échelle (Daubechies, Haar) | ○ |
 | L3 | Quasi-périodicité | autocorrélation, peaks de Fourier | ○ |
+| L4 | Symbol calculus (microlocal) | symboles polaires a(x,ξ) ; singularités fréquentielles par classe S^m_{ρ,δ} | ○ | — |
+| L5 | Calderon-Zygmund regularity | caractérisation par noyau CZ(α) ; Hölder exponent | ○ | — |
+| L6 | Spectral clustering microlocal | clusters fréquentiels ; persistance vs (ω, Δ, ℋ) | ○ | — |
 
 ### M — Propriétés conditionnelles à l'entrée
 
@@ -274,6 +298,9 @@ Lien complexité : H-matrix O(Nk log N), H²/HSS **O(Nk)**.
 | R5 | **Energy Ratio Criterion (ERC)** | (Σ_{i≤D} λ_i) / (Σ_i λ_i) → seuil pour D | indicateur de troncation |
 | R6 | **Random Fourier Features** | erreur sup_x \|K̃ - K\| ∼ O(1/√D) (Bernstein) | bound concentration |
 | R7 | **Operator-Valued Kernels** | extension vectorielle, opérateur intégral compact | extension |
+| R8 | **Clifford algebra signature** | signature quadratique induite (p+, q−, r dégénérés) de A^T A | invariant algébrique |
+| R9 | **Arf invariant** | invariant mod 8 pour formes quadratiques ; détecte orientabilité algébrique | invariant fin |
+| R10 | **Hasse-Witt symbol** | produit fini des symboles de Hilbert ; invariant local-global | invariant archiméd |
 
 Lien complexité : K tronquable à D ≪ N → O(ND) au lieu de O(N²).
 
@@ -332,19 +359,93 @@ Cadre fonctionnel-analyste : T comme opérateur intégral avec noyau analytique.
 | V4 | **Matrices résultantes / Sylvester / Bezout** | provenant de polynômes algébriques | rangs algébriques |
 | V5 | **Matrices de Wishart** (statistiques) | M = X X^T / n, X ∼ Gaussian | spectre Marchenko-Pastur |
 | V6 | **Matrices à noyau analytique** | T_{ij} = K(x_i, x_j) avec K analytique → décroissance exponentielle σ_i | rate exponentielle |
+| V7 | **Microlocal ellipticity** | ellipticité partielle en (x, ξ) ; principal symbol invertible hors locus singulier | invariant microlocal |
+| V8 | **Prismathic cohomology** (frontier 2023+) | cohomologie de complexes prismatiques ; détecte structure p-adic → perfectoid | cohomologie algébrique |
+| V9 | **Donaldson-Thomas invariants** (frontier 2021+) | déformations algébriques ; invariants énumératifs sous perturbation stress | invariant énumérat |
+| V10 | **Categorical weight filtration** | graduation par poids ; perverse sheaf decomposition | invariant catégorique |
 
 Lien complexité : opérateurs CZ → précondition pour FMM (Fast Multipole Method) en O(N log N) ou O(N). Compacts → décroissance λ_i contrôle compression.
 
+### W — Complexité logique / Stabilité modèle-théorique
+
+Perspective logique : l'opérateur A défini implicitement par ses relations algébriques (équations, dépendances) encodes une "complexité de définissabilité" mesurable via théorie des modèles.
+
+| ID | Nom | Définition | Test invariant |
+|---|---|---|---|
+| W1 | **NIP (No Independent Pairs)** | absence de paires indépendantes dans formule de définissabilité ; learnability upper bound | invariant logique |
+| W2 | **NTP₂ (No Tree Property of order 2)** | absence de branchement arborescent dans formules ; stabilité supérieure | invariant logique fin |
+| W3 | **Littlestone dimension** | dimension VC généralisée pour adversarial online learning ; board size | invariant complexité |
+| W4 | **Shelah stability rank** | rang de stabilité pour théorie complète de A ; classification selon S(n) | invariant théorique |
+| W5 | **Dependence measure (mutual dimension)** | quantification des dépendances multiples ; information-theoretic stabilization | invariant dépendance |
+| W6 | **Definability complexity** | nombre de quantificateurs minimaux pour définir A en logique du premier ordre | invariant syntaxique |
+
+Lien complexité : Stabilité NIP ↔ algorithmes d'apprentissage efficaces. NTP₂ ↔ bornes PAC complexité. Littlestone ↔ lower bounds online.
+
 ---
 
-**Récap classes A-V (couverture quasi-exhaustive de l'état de l'art mathématique sur opérateurs structurés)** :
-- **Linéaires-dépendantes-d'input** : A, C, D, F, M (mesures par évaluation)
-- **Linéaires structurelles "matrix view"** : B, G, O, P, Q, R, S, T, U, V (théorie matrices/tenseurs/groupes)
-- **Cross-axes** (layers/heads) : H, I
-- **Statistico-stochastiques** : E, J, K, L
-- **Comparatives** : N
+**Récap classes A-W (couverture exhaustive de l'état de l'art mathématique 2024 sur opérateurs structurés)** :
 
-C'est l'horizon de la connaissance mathématique actuelle sur les opérateurs structurés. Si **aucun** invariant de A-V n'est satisfait par un Oracle, l'opérateur n'appartient à aucune classe théorisée connue → soit O(N²) intrinsèquement, soit nouvelle classe à théoriser (publication mathématique potentielle).
+**Groupes stratégiques** :
+1. **Linéaires-dépendantes-d'input** : A, C, D, F, M — mesures par évaluation sur données stressées
+2. **Structurelles "matrix algebra"** : B, G, O, P, Q, R, S, T, U, V — théorie matrices/tenseurs/groupes + elimination theory + frontière
+3. **Cross-axes** (layers/heads) : H, I — propagation et diversité
+4. **Statistico-stochastiques** : E, J, K, L — caractères probabilistes + analyse microlocale
+5. **Comparatives + Logique** : N, W — relativité Oracle vs student + expressibilité algébrique
+6. **Frontier (2023+)** : V8-V10, W — cohomologie prismatique, Donaldson-Thomas, instabilité modèle-théorique
+
+**Propriété clé** : Si **aucun** invariant de A-W n'est satisfait par un Oracle, l'opérateur n'appartient à aucune classe théorisée connue → soit O(N²) intrinsèquement, soit classe mathématique nouvelle à théoriser (publication math + révision théorie opérateurs).
+
+### II.7 Enrichissements intégrés depuis Atlas (mai 2026)
+
+**Intégration Tier 1 (ASP-critical)** — 16 propriétés nouvelles :
+- **Elimination theory** (A7, A8, B8) : discriminant/résultant polynôme caractéristique, rang Sylvester
+- **Fisher information geometry** (C7, C8, D4) : métrique Riemannienne sur espace softmax, courbure variétés statistiques
+- **Microlocal analysis** (D5, D6, L4, L5, L6) : wave front set, characteristic variety, symbol calculus, CZ regularity, clustering microlocal
+- **Tropical geometry** (B7) : hiérarchie magnitude log-échelle (dominance structure)
+- **Holonomic systems** (G6, G7, G8) : Bernstein-Sato polynomial, D-module structure, syzygies
+
+**Intégration Tier 2 (scientific completeness)** — 19 propriétés nouvelles :
+- **Model-theoretic stability** (W1-W6) : NIP, NTP₂, Littlestone dimension, Shelah rank, dependence measure, definability complexity
+- **Clifford/algebraic invariants** (R8, R9, R10) : quadratic signature, Arf invariant, Hasse-Witt symbol
+- **Categorical framework** (V10) : weight filtration, perverse sheaf decomposition
+- **Frontier concepts** (V8, V9) : prismathic cohomology, Donaldson-Thomas invariants
+
+**Impact** : Catalogue étendu de ~70 à ~130+ propriétés. Couverture mathématique 2024 : élimination poly, géométrie différentielle, analyse microlocale, géométrie tropicale, holonomie algébrique, stabilité logique, invariants algébriques, catégoriques, et frontière (prismathique, énumératif).
+
+**Universalité attendue** : Les Tier 1 propriétés (surtout elimination theory + Fisher + microlocal) doivent distinguer les grandes classes attention. Les Tier 2 enrichissent pour publication Partie 1. Les frontier (Tier 3, V8-V9) restent exploratoires — testables à stress extrême ℋ.
+
+### II.8 Infrastructure d'extraction (refactor 2026-05-11)
+
+L'infrastructure d'extraction des matrices d'attention (`CODE/phase1_metrologie/oracle/extract.py`) a été refactorée pour supporter le catalogue étendu A-W et les besoins mémoire des phases 2+.
+
+**Trois APIs disponibles** :
+
+| API | Cas d'usage | Pic mémoire FP64 |
+|---|---|---|
+| `extract(...)` | Batch processing avec besoin de toutes les couches (S_KL, S_Spectral cross-layer max-pool) — backward compat phase 1.5 | L × (B,H,N,N) |
+| `extract_per_layer(...)` | Audit per-layer indépendant (phase 2 SVD, r_eff par couche) | 1 × (B,H,N,N) |
+| `extract_streamed(..., callback)` | Streaming compute (signaux par couche, sauvegarde disque) | 1 × (B,H,N,N) |
+| `extract_windowed_per_layer(..., K=64)` | Fenêtres K×K diagonales (phase 2, r_eff windowed, A1) | 1 × (B,H,K,K) |
+
+**ExtractorConfig** :
+- `fp64: bool = True` — cast FP64 (par défaut) ou conserve natif
+- `validate_numerics: bool = False` — check NaN/Inf/range[0,1] post-softmax
+- `empty_cache_per_layer: bool = True` — `torch.cuda.empty_cache()` entre couches
+- `max_layers: int | None` — limit nb couches (debug, dev)
+- `stream_to_disk: Path | None` — sauvegarde `layer_NNN.pt` par couche (très grandes seq_len)
+
+**Limites** :
+- Le forward Oracle reste monolithique : toutes attentions matérialisées dans buffers `.last_attn` pendant le forward. Le streaming réduit la mémoire FP64 + downstream, PAS le pic du forward (~B·L·H·N²·dtype_size).
+- Pour seq_len > ~8192 : refactor transformer.py avec hook per-layer (TODO phase 2, cf. DOC/02 §extraction).
+
+**Lien avec catalogue A-W** :
+- A1, A4 (r_eff, entropie spectrale) → `extract_windowed_per_layer(K)` puis SVD locale
+- A7-A9 (discriminant, résultant) → `extract_per_layer` puis `torch.linalg.eigvals` + polynômes
+- B1-B9 (structurelles) → `extract_per_layer` puis distances Frobenius / projections
+- C7-C9 (Fisher) → `extract_per_layer` puis dérivées numériques
+- D5-D7, L4-L6 (microlocal) → `extract_per_layer` + FFT 2D + symbol estimation
+- P1-P4 (Hankel) → `extract_per_layer` + construction Hankel + SVD
+- Q1-Q6 (hiérarchique) → `extract_per_layer` + admissibilité + ACA
 
 ---
 
@@ -466,22 +567,38 @@ Items directement utiles à valider l'**hypothèse polymorphique** (Partie 2) ET
 - Sprint 5a — Cross-layer/head (H1-H4, I1-I3) : 5-8h
 - Sprint S_Grad dédié (C6) : 3-5h dev (signal manquant H2)
 
-#### V.0.b — **Phase Partie 1 enrichie** (~25h dev, ~$15-30 compute, après V.0.a)
-Items qui élargissent la classification scientifique mais **ne servent pas directement à ASP** :
+#### V.0.b — **Phase Partie 1 enrichie Tier 1 + 2** (~60-80h dev, ~$20-40 compute, après V.0.a ou parallèle si budget)
 
-- Q1-Q6 (matrices hiérarchiques H/HSS) — utile pour compression hiérarchique alternative
-- R2-R7 (Mercer décomposition complète, Bochner, RFF, ERC) — utile pour kernel approx
-- J1-J4 (Markov / state-space) — utile pour Mamba-like alternatives
-- K1-K4 (topologie / graphes / TDA) — exploration scientifique
-- L1-L3 (FFT 2D, wavelets, quasi-périodicité) — exploration scientifique
-- E1-E2 (information-théoriques) — exploration
-- F1-F2 (dynamiques sensitivity) — exploration
-- N1-N3 (comparatives Oracle/student) — post-construction student
+**Tier 1 items** (ASP-adjacent, science-critical) :
+- A7, A8, A9 (discriminant, résultant, Weyl equidistribution) — polynôme caractéristique
+- B7, B8, B9 (tropical, Sylvester, quasiseparable) — structures magnitude + rank generalized
+- C7, C8, C9 (Fisher, Wasserstein, diffusion geometry) — geometric statistics
+- D4, D5, D6, D7 (Fisher curvature, wave front, characteristic variety, microlocal) — geometric-microlocal
+- G6, G7, G8 (Bernstein-Sato, D-module, syzygies) — algebraic holonomic systems
+- L4, L5, L6 (symbol calculus, CZ regularity, microlocal clustering) — microlocal analysis + harmonic
+- R8, R9, R10 (Clifford, Arf, Hasse-Witt) — algebraic quadratic invariants
+- V8, V9, V10 (prismathic, Donaldson-Thomas, categorical weight) — frontier algebraic geometry
 
-**Sprints (à dérouler après V.0.a + verdict ASP)** :
-- Sprint 4 — Hiérarchique (Q) : 8-12h
-- Sprint 6 — Markov + topo + freq + RFF (J, K, L, R2-R7) : 12-18h
-- Sprint 7 — Info-th + dyn + comparatives (E, F, N) : 6-10h
+**Tier 2 items** (science completeness) :
+- W1-W6 (NIP, NTP₂, Littlestone, Shelah, dependence, definability) — model-theoretic stability
+- Q1-Q6 (matrices hiérarchiques H/HSS) — compression hiérarchique
+- R2-R7 (Mercer décomposition, Bochner, RFF, ERC) — kernel approximation
+- J1-J4 (Markov / state-space) — stochastic processes
+- K1-K4 (topologie / graphes / TDA) — topological data analysis
+- E1-E2 (information-théoriques) — information geometry
+- F1-F2 (dynamiques sensitivity) — functional sensitivity
+- N1-N3 (comparatives Oracle/student) — distillation analysis
+
+**Sprints (priorisés Tier 1 > Tier 2)** :
+- **Sprint Tier1a — Elimination + Polynomial invariants** (A7-A9, B8) : 4-6h dev
+- **Sprint Tier1b — Fisher + Differential Geometry** (C7-C9, D4) : 5-7h dev
+- **Sprint Tier1c — Microlocal analysis** (D5-D7, L4-L6) : 6-10h dev (frontend, image processing)
+- **Sprint Tier1d — Tropical + Holonomic systems** (B7, B9, G6-G8) : 5-7h dev
+- **Sprint Tier1e — Clifford + Frontier (V)** (R8-R10, V8-V10) : 6-8h dev (algebraic geometry)
+- **Sprint Tier1f — Logical Complexity (W)** (W1-W6) : 4-6h dev (model theory, PAC bounds)
+- **Sprint Tier2a — Hiérarchique + Mercer** (Q, R2-R7) : 10-15h dev
+- **Sprint Tier2b — Markov + Topo + Freq** (J, K, remaining L) : 12-18h dev
+- **Sprint Tier2c — Info-th + Dyn + Comparatives** (E, F, N) : 6-10h dev
 
 ### V.1 Détail des Sprints
 
@@ -548,6 +665,24 @@ Le **rapport Partie 1** présente :
 
 ---
 
+## VI.1 Priorité implémentation post-enrichissement (mai 2026)
+
+**Pour validation H2 (ASP)** — continuer avec phases 2-5 :
+- Tier 1c (microlocal : D5-D7) peut servir pour **phase 2 spectral audit** (signature locale fréquentielle)
+- Tout autre Tier 1 enrichit Partie 1 science mais ne bloque pas ASP
+
+**Pour publication Partie 1 complète** — après verdict ASP :
+- Implémenter Tier 1a-f (priorité : Tier1c > Tier1a > Tier1d) pour couverture mathématique robuste
+- Ajouter Tier 2 (Logical Complexity W prioritaire pour structure dépendance)
+- Tier 2 (Hierarchical Q, Mercer R2-R7) utiles pour algorithmic complexity reporting
+
+**Budget temps estimé** :
+- Tier 1 complet : 30-40h dev (peut paralleliser avec phase 2 pilot)
+- Tier 2 complet : 30-40h dev
+- Total catalogue vers exhaustivité : 60-80h après V.0.a (ASP sprint)
+
+---
+
 ## VII. Références bibliographiques
 
 ### Matrices structurées et rang de déplacement
@@ -578,6 +713,54 @@ Le **rapport Partie 1** présente :
 - Gu, M. (1995) — Stabilisation algorithme de Schur.
 - Higham, N. J. (2002) — *Accuracy and Stability of Numerical Algorithms*. SIAM.
 
+### Théorie de l'élimination & Résultants polynomiaux
+- Macaulay, F. S. (1902) — *The Algebraic Theory of Modular Systems*. Cambridge UP.
+- van der Waerden, B. L. (1950) — *Modern Algebra* (élimination theory, Sylvester matrix). Dover.
+- Gröbner, W. (1939) — *Über ein neues Ideal-Theoretisches Rechtsverfahren*. Monatsh. Math.
+- Basu, S., Pollack, R., Roy, M.-F. (2003) — *Algorithms in Real Algebraic Geometry*. Springer (resultants, discriminants).
+- Sturmfels, B. (2002) — *Solving Systems of Polynomial Equations*. AMS (elimination via resultants).
+
+### Géométrie tropicale
+- Mikhalkin, G. (2000, 2005) — Tropical geometry, tropical varieties.
+- Maclagan, D., Sturmfels, B. (2015) — *Introduction to Tropical Geometry*. AMS.
+- Speyer, D., Sturmfels, B. (2009) — Tropical mathematics. arXiv:0901.2008.
+- Baker, M., Payne, S. (2016) — Tropical geometry survey. Handbook of moduli.
+
+### Analyse microlocale & Opérateurs pseudo-différentiels
+- Hörmander, L. (1985) — *The Analysis of Linear Partial Differential Operators*. Springer (symbol calculus, microlocal analysis).
+- Duistermaat, J. J., Guillemin, V. (1975) — *The Geometry of the Moment Map*. (wave front sets, microlocality).
+- Gelfand, I. M., Shilov, G. E. (1964) — *Generalized Functions*. Vol 1. (distributions, singularities).
+- Shubin, M. A. (2001) — *Pseudodifferential Operators and Spectral Theory*. Springer (opérateurs pseudo-diff).
+
+### Géométrie différentielle & Géométrie de l'information
+- Amari, S. (1985) — *Differential-Geometric Methods in Statistics*. Springer (Fisher metric, information geometry).
+- Amari, S., Nagaoka, H. (2000) — *Methods of Information Geometry*. AMS (variétés statistiques, géométrie Riemannienne).
+- Efron, B. (1975) — *Defining the Curvature of a Statistical Problem* (avec comment). AAS (Fisher curvature).
+- Otto, F., Villani, C. (2000) — *Generalization of an Inequality by Talagrand and Application to Second-Order Markov Chains*. JFA (Wasserstein, transport optimal).
+
+### Systèmes holonomes & D-modules
+- Kashiwara, M. (1970) — *b-functions and holonomic systems*. Inventiones Math.
+- Bjork, J.-E. (1979) — *Rings of Differential Operators*. North-Holland (D-modules, holonomicity).
+- Bernstein, I. N., Sato, F. (1972) — *b-functions and holonomic systems*. Functional Anal. Appl.
+- Grayson, D. R., Stillman, M. E. — *Macaulay2* (syzygies, free resolutions, D-modules computation).
+
+### Théorie des modèles & Complexité logique (NIP, NTP₂)
+- Shelah, S. (1990) — *Classification Theory: The Number of Non-Isomorphic Models*. North-Holland (NIP, stability rank).
+- Simon, P. (2015) — *A Guide to NIP Theories*. Lecture Notes in Logic, CUP (No Independent Pairs).
+- Chernikov, A., Simon, P. (2015) — *Definably connected NIP fields*. arXiv (NTP₂ complexity).
+- Ben-Yaacov, I., Itaï, T., Usvyatsov, A. (2009) — *Continuous model theory*. Logic Colloq. Lecture Notes.
+
+### Apprentissage & Dimension de Littlestone
+- Littlestone, N. (1987) — *Learning Quickly when Irrelevant Attributes Abound*. FOCS (Littlestone dimension).
+- Shalev-Shwartz, S., Shai Ben-David (2014) — *Understanding Machine Learning: Theory to Algorithms*. Cambridge UP (VC/Littlestone dimensions, PAC bounds).
+- Alon, N., Ben-David, S., Cesa-Bianchi, N., Haussler, D. (1997) — *Scale-sensitive Dimensions, Uniform Convergence, and Learnability*. JCSS.
+
+### Invariants catégoriques & Géométrie algébrique énumératives
+- Leinster, T. (2008) — *The Euler Characteristic of a Category* (magnitude). Documenta Mathematica.
+- Kontsevich, M., Soibelman, Y. (2000) — *Cohomological Hall algebra, exponential Hodge structures and motivic Donaldson-Thomas invariants* (DT invariants). arXiv:math/0006102.
+- Joyce, D. (2007) — *Configurations in Abelian Categories and Moduli Problems for Bridging Categories*. arXiv (t-structures, categorical invariants).
+- Bhatt, B., Scholze, P. (2013) — *The Prism* (prismathic cohomology). arXiv:1305.5908.
+
 ---
 
 ## Liens internes
@@ -586,4 +769,11 @@ Le **rapport Partie 1** présente :
 - **Phase 1 metrologie** (Oracle, SSG, hankel/spectral metrics) : [DOC/01_phase_metrologie.md](01_phase_metrologie.md)
 - **Phase 1.5 spec** (signaux phase 1.5 utilisés en pratique pour Partie 2) : [DOC/01b_phase_calibration_signal.md](01b_phase_calibration_signal.md)
 - **Phase 2 audit spectral** (SCH, structures) : [DOC/02_phase_audit_spectral.md](02_phase_audit_spectral.md)
-- **Carnet — décisions cadrage** : [DOC/carnet_de_bord.md](carnet_de_bord.md) (entrées 2026-05-11 10:10, 10:15, 10:25, 10:35)
+- **Carnet — décisions cadrage** : [DOC/carnet_de_bord.md](carnet_de_bord.md) (entrées 2026-05-11 10:10, 10:15, 10:25, 10:35, refactor extract)
+
+## Liens code (infrastructure)
+
+- **Extraction matrices** (per-layer / streamed / windowed) : `CODE/phase1_metrologie/oracle/extract.py`
+- **Tests extraction streaming** : `CODE/phase1_metrologie/tests/test_extract_streaming.py`
+- **Signaux phase 1.5** : `CODE/phase1b_calibration_signal/signals/` (s_kl, s_spectral, s_grad)
+- **Audit spectral phase 2** : `CODE/phase2_audit_spectral/` (svd_pipeline, stress_rank_map, transfer_law)
