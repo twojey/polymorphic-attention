@@ -23,7 +23,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
 | H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **VALIDÉE V1 sur S_Spectral seul, fragile** au point (K=64, bench Δ∈[16,64,256]). S_Grad exclu (§8 piège 5). **Run 1 NO-GO** Δ≤64 K=64 (`5e5ead1e`, ρ_Δ=0.704 ✅, \|ρ_ℋ\|=0.245 ❌). **Run 2 GO** Δ étendu K=64 (`389383a2`, ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅). **Run 3 FINISHED 20:07 UTC** pod CPU, S_KL option C testé (`b0243f3a`, n=2000, n_calib=256, durée 4h59) : **S_KL NO-GO** (ρ_Δ=0.335 ❌ très loin), S_Spectral reproduit Run 2 (ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅), `retained_signals=S_Spectral`, `status=exploratory` (git dirty au lancement → ne compte pas pré-enregistré strict). **Run 4 NO-GO sensitivity** K=32 (`87ebc2d0`, ρ_Δ=0.654 ❌). **Bilan : 1 seul signal (S_Spectral) × 1 seul point de calibration valide. Pas de signal indépendant pour consolider.** |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | **VALIDÉE forte** 2026-05-12 (run pod RTX 5090, commit `288e1b7`) : r_eff médian = **2**, max = 13 sur 485 376 matrices ; 78.9 % r_eff ≤ 3, 99.8 % ≤ 10. Concentration prédictible reproductible. Cf. [rapport phase 2](reports/phase2.md). |
-| H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | **REJETÉE sur sous-catalogue testé** (Toeplitz, Hankel, Identity, composition T+H) : orphan_ratio = 1.000/1.000. ε_best min = 0.45, médian = 0.98. ⚠ **MAIS** : seules 3 classes sur ~17 prévues (DOC/00b) ont été testées. Cauchy / Vandermonde / Banded / Block-sparse / Butterfly / Monarch NON testés. Verdict honnête : "non couvert par sous-catalogue de 3 projecteurs", pas "non couvert par le catalogue complet". Dette V2 : implémenter projecteurs manquants (Cauchy prime suspect vu résidu rank-1). |
+| H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | **REJETÉE sur sous-catalogue testé** (Toeplitz, Hankel, Identity, composition T+H) : orphan_ratio = 1.000/1.000. ε_best min = 0.45, médian = 0.98. ⚠ **MAIS** : seules 3 propriétés de famille B sur ~131 prévues au catalogue DOC/00b (23 catégories A-W) ont été testées. Cauchy / Vandermonde / Banded / Block-sparse / Butterfly / Monarch + familles C-W NON testées. Verdict honnête : "non couvert par sous-catalogue de 3 propriétés", pas "non couvert par le catalogue complet". Dette V2 : implémenter propriétés manquantes (Cauchy prime suspect vu résidu rank-1). |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | **Non concluant** : r_eff varie peu (1-13 sur 99.93 %) → signal compressé pour la régression log-linéaire. À refaire offline avec calibration différente, ou abandonner H5 sur SMNIST seul. |
 | H6 | Les exposants sont **universels cross-domain** (verdict `cross_domain_compare`) | 2 | Sprint 4 (multi-Oracle) |
 | H7 | Test 6c : ASP avec R_max = r_med/2 atteint ≥ 95 % qualité Oracle | 5 | Sprint 4 |
@@ -39,6 +39,83 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-12 ~14:00 UTC — Refactor architecture `catalog/` : scaffold deepening posé
+
+**Trigger** : suite au pivot Partie 1 prioritaire (cf. ~11:00 UTC), le code legacy `phase2_audit_spectral/` et `phase3_kernel_asp/` est trop monolithique pour porter 131 propriétés × 4 oracles × 5 niveaux de battery. Refactor architectural avant de dérouler Sprint A1.
+
+**Skill utilisé** : `/improve-codebase-architecture` (deepening opportunities, langage Property/Projector/Battery/Oracle).
+
+**9 candidates de deepening identifiées**, 6 implémentées en première vague (#1-5, #8) :
+
+1. **Oracle adapter** — `catalog/oracles/`
+   - `AbstractOracle` interface (oracle_id, domain, n_layers, regime_grid, extract_regime)
+   - `AttentionDump` dataclass + `.validate()`
+   - `RegimeSpec` hashable (ω, Δ, ℋ, extra)
+   - 2 adapters concrets : `SyntheticOracle` (4 structures de test) + `SMNISTOracle` (wrappe phase 1)
+   - Lazy import `SMNISTOracle` via `__getattr__` pour éviter dépendance forte phase 1
+2. **Property + Family** — `catalog/properties/base.py` + `registry.py`
+   - ABC `Property` avec métadonnées enforced (name, family A-W, cost_class 1-5, requires_fp64, scope per_regime|cross_regime)
+   - `PropertyContext` dataclass : cache lazy partagé entre Properties (SVD, projections, etc.)
+   - `PropertyRegistry` singleton + `@register_property` décorateur
+   - `_discover_properties()` : auto-discovery de tous les `family_*/` au runtime
+3. **Projector primitives** — `catalog/projectors/`
+   - ABC `Projector` (project, epsilon, residual) — instance-based pour Cauchy/Vandermonde paramétrés
+   - 5 modules : `identity`, `toeplitz`, `hankel`, `block_diagonal`, `banded`
+4. **MachineProfile** — `infra/machine.py`
+   - Dataclass frozen + `GpuArch` enum (Blackwell consumer fp64=1/64 nerf, Ada, Hopper, Ampere, CPU)
+   - `detect()`, `fake()`, `apply_blas_env()`, `dtype_svd`
+5. **Generic Checkpoint** — `shared/checkpoint.py`
+   - Atomic save (torch.save → os.replace), fingerprint pickle, has/save/load API
+   - Remplacera phase2/phase3 checkpoint.py dupliqués (TODO migration)
+6. **Battery levels** — `catalog/batteries/levels.py`
+   - 5 factory functions : `level_minimal` (cost ≤1), `level_principal` (≤2), `level_extended` (≤3), `level_full` (≤4), `level_research` (toutes)
+   - Composent via `REGISTRY.filter()` puis filtrent par scope per_regime + cross_regime
+7. **Driver CLI** — `catalog/run.py`
+   - Entry point `python -m catalog.run --oracle smnist --level principal --checkpoint ... --output ...`
+   - Auto-detect MachineProfile, BLAS env, checkpoint atomic, args robustes
+   - Sortie : `results.json` sérialisable + `state/` pour reprise
+
+**Properties implémentées (6) — toutes en famille A/B** :
+- A1 `r_eff` (spectre) — cost 2
+- B0 `identity_distance` — cost 1
+- B1 `toeplitz_distance` — cost 2
+- B2 `hankel_distance` — cost 2
+- B5 `block_diagonal_distance` (grille block_size) — cost 2
+- B6 `banded_distance` (grille bandwidth) — cost 2
+
+**Vocabulaire architectural** : `DOC/CONTEXT.md` ajouté (distinct de glossaire.md mathématique). Définit Property, Family, Projector, PropertyContext, Battery, Oracle, AttentionDump, MachineProfile, etc.
+
+**Validation end-to-end** :
+- `python -m catalog.run --oracle synthetic --level principal` : 6 Properties × 3 régimes en 0.28 s ✅
+- `python -m catalog.run --oracle smnist --level minimal --checkpoint OPS/checkpoints/oracle_e2f0b5e.ckpt --regime-cap 2 --n-examples 4` : extract réelle ω=0 Δ=16 + ω=1 Δ=16, 6 layers × 32 matrices, B0 ε ≈ 0.97-0.99 (attendu : attention dense ≠ diagonale) ✅
+- **Suite tests : 282 verts** (175 legacy phase1/2/3 + 107 catalog/infra/shared)
+
+**Commits du refactor (chronologique)** :
+- `chore(catalog): scaffold deepening — Property + Projector + Registry`
+- `feat(catalog): Battery levels + B5 BlockDiagonal + B6 Banded Properties`
+- `feat(catalog): SMNISTOracle adapter + CLI runner — pipeline end-to-end fonctionnel` (commit `45a1469`)
+
+**Reste à faire** (deepening + scientific) :
+- **Deepening résiduel** :
+  - #6 Driver Harness (mlflow_logger + dispatch tâches) — partiellement fait via `run.py`
+  - #7 OPS/setup/ séparé de OPS/env/ pour bootstrap machine
+  - Migration `phase2/checkpoint.py` + `phase3/checkpoint.py` → `shared/checkpoint.py`
+  - Migration `cuda.is_available()` inline → `MachineProfile.detect()`
+- **Scientific (Sprint A1) — familles à implémenter** :
+  - Famille B suite : B3 Cauchy (poles appris), B4 Vandermonde, B7 Tropical, B8 Sylvester (~4 Properties)
+  - Famille O (rangs de déplacement) : ~5 Properties
+  - Famille P (Ho-Kalman) : ~6 Properties
+  - Famille L (frequency, FFT 2D, wavelets) : ~6 Properties
+  - Famille U (sparse-structured : Butterfly, Monarch, Pixelfly, Block-sparse, Sparse+low-rank) : ~5 Properties
+  - Famille Q (hierarchical : H-matrix, HSS, nestedness) : ~5 Properties
+  - Familles C, R, T (token stats, RKHS, equivariances) : ~10 Properties
+- **Oracle LL** : `catalog/oracles/language.py` (nécessite training TinyStories, Sprint S7)
+- **Cross-Oracle SMNIST × LL** : analyse comparative (livrable scientifique "Mathematical Signatures of Attention")
+
+**Décision conservée** : pas de nouveau pod tant que le catalog Property-by-Property n'est pas plus dense — dev pur VPS suffit jusqu'à ~50 Properties, ensuite pod CPU pour le passage sur 9 dumps multi-bucket.
+
+---
 
 ### 2026-05-12 — Synthèse de journée (récap pour reprise rapide)
 
