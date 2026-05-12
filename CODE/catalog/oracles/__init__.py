@@ -17,3 +17,11 @@ __all__ = [
     "RegimeSpec",
     "SyntheticOracle",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import SMNISTOracle (qui dépend de phase1_metrologie)."""
+    if name == "SMNISTOracle":
+        from catalog.oracles.smnist import SMNISTOracle
+        return SMNISTOracle
+    raise AttributeError(f"module 'catalog.oracles' has no attribute {name!r}")
