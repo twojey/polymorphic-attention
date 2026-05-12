@@ -40,7 +40,7 @@ asp::init_strict_mode
 NOHUP_MODE=0
 WATCH_MODE=0
 LOG_PREFIX="phase1b"
-CHECKPOINT_PATH_DEFAULT="/root/polymorphic-attention/OPS/logs/mlflow/artifacts/2/7e1e859818b64b85b6c2c88433767c48/artifacts/oracle/s1_smnist_oracle_e2f0b5e_oracle.ckpt"
+CHECKPOINT_PATH_DEFAULT="OPS/checkpoints/oracle_e2f0b5e.ckpt"
 CHECKPOINT_PATH=""
 
 while [[ $# -gt 0 ]]; do

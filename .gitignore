@@ -57,6 +57,9 @@ lightning_logs/
 *.pth
 *.safetensors
 **/checkpoints/
+# Exception : Oracles de référence (commité pour transfert pod + reproductibilité)
+!OPS/checkpoints/
+!OPS/checkpoints/*.ckpt
 
 # --- Datasets (cache et brut) ---
 data/
