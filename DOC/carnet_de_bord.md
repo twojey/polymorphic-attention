@@ -21,7 +21,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | # | Hypothèse | Phase test | Statut |
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
-| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **VALIDÉE conditionnellement V1** via S_Spectral au point (K=64, bench Δ∈[16,64,256]). S_Grad exclu (§8 piège 5 — d'ailleurs `enabled=true` est dead code dans run.py). **Run 1 NO-GO** Δ≤64 K=64 (MLflow `5e5ead1e`, ρ_Δ=0.704 ✅, \|ρ_ℋ\|=0.245 ❌). **Run 2 GO** Δ∈[16,64,256] K=64 (MLflow `389383a2`, ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅). **Run 3 crashé OOM** sur VPS (relancé sur pod CPU 15:08 UTC, en cours). **Run 4 NO-GO sensitivity** K=32 Δ∈[16,64,256] (MLflow `87ebc2d0`, ρ_Δ=0.654 ❌, ρ_ω=0.507 ❌, \|ρ_ℋ\|=0.085 ✅). **Verdict V1 nuancé : H2 valide sur 1 signal × 1 point (K, bench)** — fragile (changer K *ou* range Δ casse le verdict). Run 3 ressuscité doit dire si S_KL apporte un 2e signal indépendant. |
+| H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **VALIDÉE V1 sur S_Spectral seul, fragile** au point (K=64, bench Δ∈[16,64,256]). S_Grad exclu (§8 piège 5). **Run 1 NO-GO** Δ≤64 K=64 (`5e5ead1e`, ρ_Δ=0.704 ✅, \|ρ_ℋ\|=0.245 ❌). **Run 2 GO** Δ étendu K=64 (`389383a2`, ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅). **Run 3 FINISHED 20:07 UTC** pod CPU, S_KL option C testé (`b0243f3a`, n=2000, n_calib=256, durée 4h59) : **S_KL NO-GO** (ρ_Δ=0.335 ❌ très loin), S_Spectral reproduit Run 2 (ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅), `retained_signals=S_Spectral`, `status=exploratory` (git dirty au lancement → ne compte pas pré-enregistré strict). **Run 4 NO-GO sensitivity** K=32 (`87ebc2d0`, ρ_Δ=0.654 ❌). **Bilan : 1 seul signal (S_Spectral) × 1 seul point de calibration valide. Pas de signal indépendant pour consolider.** |
 | H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
@@ -39,6 +39,78 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-12 — Pré-pod phase 2 : diagnostic découplage + durcissement drivers
+
+**#decision #infra #phase2** Préparation finale avant location pod RTX 5090 pour la phase 2 (Audit Spectral). Trois ajouts/durcissements :
+
+1. **Garde-fou découplage S_Spectral ↔ r_eff** (nouveau module `phase2_audit_spectral/signal_decoupling.py`, 12 tests verts). Calcule ρ_Spearman(r_eff_full SVD-FP64, S_Spectral_K=64) sur un sous-échantillon stratifié (200 ex par défaut) avec bootstrap IC95. Verdict bascule "ok"/"decoupled" à ρ=0.60. **Pourquoi** : carnet 2026-05-12 §"Pires résultats phase 2" Niveau 2 (le pire scénario ASP, ~15-25 %). Si S_Spectral mesurait un artefact de fenêtre K=64 et pas le vrai rang structurel, H2 (allocation guidée) tombe même si SCH/H3-H4 sont validées. Détection précoce dès le smoke run au lieu de cramer 10h en aveugle.
+
+2. **Bug fix `diagnose_heads`** : run.py passait r_eff de shape (L, B, H) mais `diagnose_heads` attend (L, H, n_examples) — variance par tête calculée sur le mauvais axe → diagnostic spec_h faux dans le code phase 2 existant. Fix : transpose explicite `r_eff_per_layer_head_example.transpose(0, 2, 1)` avant l'appel. Tests existants (`test_diagnose_heads_detects_dormant`, `top_specialized_heads_orders_by_var`) déjà sur shape correcte → bug n'apparaissait pas en tests mais aurait corrompu le verdict head_specialization sur vraies données.
+
+3. **Robustesse drivers (phase 1 V2 `run_extract.py` + phase 2 `run.py`)** :
+   - Toutes warnings/erreurs → stderr avec `traceback.print_exc(limit=...)` (cf. [Robustesse scripts obligatoire](feedback_script_robustness.md))
+   - `_safe_mlflow()` wrapper : MLflow log_artifact/log_metric **warn-but-continue**. Disque = source de vérité, donc coupure réseau MLflow ne perd pas d'heures de calcul. Bloquant ssi opération critique (start_run).
+   - `_print_resource_snapshot()` : RAM (psutil) + VRAM (torch.cuda.mem_get_info) loggés avant chaque bucket lourd
+   - `_validate_existing_dump()` + `extraction.resume_skip_existing=true` (défaut OPS/configs/phase1/oracle_smnist.yaml) : skip buckets déjà extraits et valides — utile post-crash ou post-MLflow-fail
+   - Validation manifeste `attn / omegas / deltas / entropies` cohérents par dump (sanity sur clés + tailles) → SystemExit clair plutôt que crash 200 lignes plus loin
+   - Stderr explicite si `git_dirty=True` au lancement (rappelle que `status=exploratory`, comme Run 3)
+
+4. **Efficacité SVD (`svd_pipeline.py`)** : ajout paramètres `device` et `precision` à `svd_attention`. Défaut = CPU FP64 (spec stricte DOC/01 §8.4) ; option `device="cuda", precision="fp32"` pour consumer Blackwell (RTX 5090, FP64 ≈ 1/64 du FP32). r_eff(θ) ne dépend que de l'ordre des valeurs singulières → FP32 suffit en pratique (vérifié `r_eff_99 fp64 == fp32` sur softmax bruit). Bonus : fallback `eigvalsh(A A.T + εI)` automatique si cuSolver SVD non-convergent (carnet Run 3 §bug).
+
+**Tests** : 114 verts (CODE/phase1+1.5+2+shared), incluant 12 nouveaux pour le diagnostic découplage (sous-échantillonnage stratifié déterministe, agrégation per-example, exclusion warmup, intégration synthétique).
+
+**Pré-requis lancement pod inchangé** :
+- git clean → status=registered
+- Variables BLAS=1 dans `OPS/env/launch_phase1b.sh` (déjà fait)
+- Tunnel SSH MLflow ouvert
+- Checkpoint Oracle disponible (`s1_smnist_oracle_e2f0b5e_oracle.ckpt`)
+
+**Lien** : tâche de session 2026-05-12 — préparer un pod prêt à exécuter (a) `run_extract.py` phase 1 V2 puis (b) `phase2_audit_spectral.run` avec verdict découplage automatique. Smoke 1 bucket recommandé avant full run.
+
+### 2026-05-11 20:07 UTC — Run 3 (S_KL option C) FINISHED — H2 NON consolidée
+
+**#milestone #falsifiabilite #phase1.5** Run 3 terminé proprement sur le pod CPU après 4 h 59 min (15:08 → 20:07 UTC). MLflow run `b0243f3a6cf6439aabcb2373870594c3` (exp 3, run_name `s1_smnist_signals_d43d833`, commit `d43d833`).
+
+**Métriques finales (n_examples=2000, n_calib=256, n_boot=2000, bench Δ∈[16,64,256])** :
+
+| Signal × Axe | ρ Spearman | IC95 | Seuil | Statut |
+|---|---|---|---|---|
+| **S_Spectral × Δ** | **+0.7090** | [0.7071, 0.7111] | > 0.70 | ✅ IC entièrement au-dessus |
+| S_Spectral × ω | +0.5460 | [0.5432, 0.5490] | > 0.70 | ❌ |
+| S_Spectral × ℋ | −0.1627 | [−0.1666, −0.1589] | \|·\| < 0.20 | ✅ |
+| **S_KL × Δ** | **+0.3347** | [0.3308, 0.3386] | > 0.70 | ❌ **très loin** |
+| S_KL × ω | +0.4304 | [0.4269, 0.4341] | > 0.70 | ❌ |
+| S_KL × ℋ | −0.1249 | [−0.1291, −0.1207] | \|·\| < 0.20 | ✅ |
+
+Driver verdict : `phase1b_passed=1`, `retained_signals=S_Spectral`.
+
+**Lectures scientifiques** :
+
+1. **S_KL échoue clairement à fournir un 2ᵉ signal indépendant**. ρ_Δ=0.335, à mi-chemin du seuil. Le pari "option C amendement V1.5 (baseline empirique calibrée sur 256 ex noise-only)" ne sauve pas S_KL. **Le verdict H2 reste fragile sur 1 seul signal**.
+
+2. **S_Spectral reproduit Run 2 quasi-parfaitement** (ρ_Δ 0.709 = 0.709). Reproductibilité excellente sur le même point de calibration (K=64, bench étendu). S_KL × ℋ ✅ confirme que S_KL n'est pas un artefact bruit, juste qu'il ne capture pas la structure Δ.
+
+3. ⚠ **Tag MLflow `status=exploratory`** (pas `registered`). `git_status_clean()` a renvoyé False au lancement (untracked files ou modifs non commitées). Ce run **ne compte pas comme preuve pré-enregistrée stricte** (T.1). Le verdict scientifique tient mais ne peut pas être cité tel quel dans le papier sans re-run propre, ou sans amender la stratégie de pré-enregistrement.
+
+4. **Conséquence roadmap** : on a un GO net sur S_Spectral seul, mais aucune redondance cross-signal. Trois options méthodologiques :
+   - **(A) Accepter et passer Sprint 2** : la spec §4.3 dit "un signal qui passe les 2 critères suffit". Économie de moyens respectée. Risque : si phase 2 NO-GO, on n'aura pas su distinguer "structure absente" de "signal capricieux".
+   - **(B) Investir Sprint S_Grad** (3-5 h dev + 1-2 h compute) : implémenter `compute_s_grad` (mode train sur bench, ‖∇_x L‖), tenter le 2ᵉ signal indépendant. Si GO → H2 robuste. Si NO-GO → on aura formellement clos la batterie {S_KL, S_Grad, S_Spectral} et l'argument "fragilité" devient un fait, pas un soupçon.
+   - **(C) Re-runner Run 2 propre** avec arbre git clean pour obtenir un `status=registered` valide, et passer Sprint 2 ensuite. Compute ~3-5 h sur pod CPU. Pas de gain scientifique nouveau mais corrige le bémol pré-enregistrement.
+
+**Rapatriement complet** :
+- Métriques MLflow exp 3 run `b0243f3a` ✅ (19 metrics, status FINISHED)
+- `OPS/logs/mlflow/artifacts/3/b0243f3a.../artifacts/config.yaml` ✅
+- `OPS/logs/run3_skl_20260511T150842Z.log` ✅ (rapatrié depuis pod)
+- `OPS/logs/manifests/s1_smnist_signals_d43d833.yaml` ✅ (rapatrié depuis pod)
+
+**Pod CPU libre** (aucun python qui tourne). Peut être terminé via UI RunPod.
+
+**À documenter** :
+- Rapport `phase1b_template.md` → instancier en `phase1b.md` avec : verdict V1 H2 = GO conditionnel S_Spectral seul, fragilité (1 signal × 1 point K, bench), tag exploratory à expliciter, recommandation Sprint S_Grad pour robustesse.
+- Mise à jour H2 dans table d'hypothèses (faite avec cette entrée).
+
+**Liens** : MLflow `b0243f3a6cf6439aabcb2373870594c3` (exp 3), log `OPS/logs/run3_skl_20260511T150842Z.log`, manifest `OPS/logs/manifests/s1_smnist_signals_d43d833.yaml`.
 
 ### 2026-05-11 ~17:00 UTC — Phase 2 driver : support multi-dump + fix hygiène OPENBLAS
 

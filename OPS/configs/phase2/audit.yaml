@@ -20,6 +20,27 @@ dumps_glob: "audit_dump_seq*.pt"
 # --- SVD ---
 theta: 0.99    # r_eff(θ) cible. ε_target sur A pré-enregistré.
 
+# --- Backend SVD (DOC/carnet 2026-05-12) ---
+# CPU FP64 = spec stricte DOC/01 §8.4. GPU FP32 = bypass pour consumer
+# Blackwell (RTX 5090, FP64 ≈ 1/64). r_eff(θ) ne dépend que de l'ordre des
+# valeurs singulières → FP32 suffit en pratique (cf. carnet).
+svd:
+  device: auto      # auto | cpu | cuda
+  precision: fp64   # fp64 | fp32
+
+# --- Diagnostic découplage S_Spectral ↔ r_eff (garde-fou H2) ---
+# Cf. DOC/carnet 2026-05-12 §"Combinaison cauchemar". Si ρ < seuil →
+# drapeau rouge, S_Spectral du Run 3 mesurait probablement un artefact
+# de fenêtre K=64 et non le vrai rang structurel.
+decoupling:
+  enabled: true
+  K: 64                  # même K que phase 1.5 Run 3 (b0243f3a)
+  tau: 1.0e-3            # idem
+  max_examples: 200      # sous-échantillonnage stratifié par régime
+  n_boot: 1000           # bootstrap IC95 (≤ phase 1.5 pour rester rapide)
+  threshold: 0.60        # ρ < seuil → "decoupled"
+  seed: 0
+
 # --- Loi de transfert ---
 transfer_law:
   min_r2: 0.50

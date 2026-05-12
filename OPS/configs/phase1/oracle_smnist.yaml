@@ -67,3 +67,4 @@ extraction:
   output_dir: /tmp/phase1_extract_v2   # dumps locaux .pt avant upload MLflow
   batch_size_cap: 8                    # plafond batch_size adaptatif (cf. _adaptive_batch_size)
   target_peak_gb: 15.0                 # budget pic FP64 attention pour le batch adaptatif
+  resume_skip_existing: true           # skip buckets déjà extraits + valides (post-crash, post-mlflow-fail)

@@ -14,6 +14,14 @@ Pipeline :
 6. Sauvegarde 1 dump par bucket : `audit_dump_seq{N}.pt`.
 7. Log MLflow : dumps comme artifacts + métriques Hankel/entropie par régime.
 
+Robustesse (DOC/feedback_script_robustness) :
+- warnings/erreurs sur stderr avec traceback (jamais silencieux) ;
+- MLflow log_artifact non-bloquant : si MLflow tombe, le dump reste sur
+  disque et le run continue (la source de vérité = le fichier `.pt`) ;
+- resume capability : `extraction.resume_skip_existing=true` saute les
+  buckets déjà extraits (utile post-crash ou si MLflow upload a échoué) ;
+- snapshot RAM/VRAM avant chaque bucket (psutil + torch.cuda.mem_get_info).
+
 Usage :
     PYTHONPATH=CODE uv run python -m phase1_metrologie.run_extract \
         --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist \
@@ -27,7 +35,9 @@ Pourquoi un driver séparé du V1 :
 
 from __future__ import annotations
 
+import sys
 import time
+import traceback
 from collections import defaultdict
 from pathlib import Path
 
@@ -57,7 +67,55 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 # -----------------------------------------------------------------------------
-# Helpers
+# Helpers robustesse
+# -----------------------------------------------------------------------------
+
+
+def _stderr(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def _safe_mlflow(operation: str, fn, *args, **kwargs):
+    """Exécute une opération MLflow ; warn-but-continue si elle échoue.
+
+    Les artefacts critiques sont écrits sur disque AVANT toute opération
+    MLflow → une coupure réseau ne doit pas annuler l'extraction. Pour les
+    opérations bloquantes (start_run, set_experiment), ne pas utiliser ce
+    wrapper.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Exception as exc:  # noqa: BLE001
+        _stderr(
+            f"[mlflow] {operation} a échoué : {type(exc).__name__}: {exc}\n"
+            f"         (artefact disque préservé, run continue)"
+        )
+        traceback.print_exc(file=sys.stderr, limit=3)
+        return None
+
+
+def _print_resource_snapshot(prefix: str) -> None:
+    """RAM disponible + VRAM, pour traçabilité avant pic mémoire."""
+    msg = prefix
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        msg += (
+            f" RAM avail={mem.available/1e9:.1f} GB used={mem.percent:.0f}%"
+        )
+    except ImportError:
+        msg += " psutil indisponible"
+    if torch.cuda.is_available():
+        free_b, total_b = torch.cuda.mem_get_info()
+        msg += (
+            f" | VRAM free={free_b/1e9:.1f} GB / {total_b/1e9:.1f} GB "
+            f"(alloc={torch.cuda.memory_allocated()/1e9:.2f} GB)"
+        )
+    print(msg, flush=True)
+
+
+# -----------------------------------------------------------------------------
+# Helpers dataset / modèle
 # -----------------------------------------------------------------------------
 
 
@@ -99,9 +157,9 @@ def _load_oracle(
         cleaned[new_k] = v
     missing, unexpected = model.load_state_dict(cleaned, strict=False)
     if missing or unexpected:
-        print(
-            f"AVERT load_state_dict : missing={len(missing)} unexpected={len(unexpected)}",
-            flush=True,
+        _stderr(
+            f"[load_oracle] state_dict : missing={len(missing)} "
+            f"unexpected={len(unexpected)} (peut être bénin selon le checkpoint)"
         )
     model.eval()
     model.to(device)
@@ -148,6 +206,47 @@ def _group_by_seq_len(
         n = item.tokens.shape[0]
         groups[n].append(idx)
     return dict(groups)
+
+
+def _validate_existing_dump(
+    dump_path: Path,
+    *,
+    expected_seq_len: int,
+    expected_L: int,
+) -> bool:
+    """Vérifie qu'un dump existant a la bonne structure pour être réutilisé.
+
+    Retourne True si le dump peut servir tel quel (skip extraction), False
+    sinon (re-extraction nécessaire). Le contenu est validé en lecture
+    légère (clés présentes, seq_len, L) — pas de vérification numérique.
+    """
+    try:
+        d = torch.load(str(dump_path), map_location="cpu", weights_only=False)
+    except Exception as exc:  # noqa: BLE001
+        _stderr(
+            f"[resume] Dump {dump_path.name} illisible ({exc}) → "
+            f"re-extraction."
+        )
+        return False
+    needed = {"attn", "omegas", "deltas", "entropies"}
+    missing = needed - set(d.keys())
+    if missing:
+        _stderr(f"[resume] Dump {dump_path.name} clés manquantes {missing} → re-extraction.")
+        return False
+    if len(d["attn"]) != expected_L:
+        _stderr(
+            f"[resume] Dump {dump_path.name} a {len(d['attn'])} couches, "
+            f"attendu {expected_L} → re-extraction."
+        )
+        return False
+    actual_seq_len = d["attn"][0].size(2)
+    if actual_seq_len != expected_seq_len:
+        _stderr(
+            f"[resume] Dump {dump_path.name} seq_len={actual_seq_len}, "
+            f"attendu {expected_seq_len} → re-extraction."
+        )
+        return False
+    return True
 
 
 # -----------------------------------------------------------------------------
@@ -228,20 +327,35 @@ def _log_bucket_metrics(
     à partir des dumps `.pt` (qui embarquent omegas/deltas/entropies). Cela
     évite de polluer MLflow avec O(L × n_régimes) métriques par bucket et
     centralise l'analyse régime dans un script séparé.
+
+    Tout échec sur une couche est reporté à stderr avec traceback (jamais
+    silencieux) mais ne stoppe pas l'extraction — les dumps complets sont
+    déjà sur disque.
     """
     attn: list[torch.Tensor] = dump["attn"]  # type: ignore[assignment]
 
     for ell, A in enumerate(attn):  # A : (B, H, N, N)
         try:
-            # hankel_rank_numerical(reduction="mean") → scalaire (moyenne sur B,H,N)
             hk_mean = float(hankel_rank_numerical(A, tau=hankel_tau).item())
             se_mean = float(spectral_entropy(A).mean().item())
-        except Exception as e:
-            print(f"    AVERT métriques couche {ell} seq={seq_len} : {e}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            _stderr(
+                f"[bucket_metrics] couche {ell} seq={seq_len} : "
+                f"{type(exc).__name__}: {exc}"
+            )
+            traceback.print_exc(file=sys.stderr, limit=3)
             continue
 
-        mlflow.log_metric(f"hankel_rank_seq{seq_len}_layer{ell}_mean", hk_mean)
-        mlflow.log_metric(f"spectral_entropy_seq{seq_len}_layer{ell}_mean", se_mean)
+        _safe_mlflow(
+            f"log_metric hankel_rank seq{seq_len} layer{ell}",
+            mlflow.log_metric,
+            f"hankel_rank_seq{seq_len}_layer{ell}_mean", hk_mean,
+        )
+        _safe_mlflow(
+            f"log_metric spectral_entropy seq{seq_len} layer{ell}",
+            mlflow.log_metric,
+            f"spectral_entropy_seq{seq_len}_layer{ell}_mean", se_mean,
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -253,6 +367,7 @@ def _log_bucket_metrics(
             config_name="oracle_smnist")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
+    _print_resource_snapshot("[startup]")
 
     oracle_checkpoint = OmegaConf.select(cfg, "oracle_checkpoint")
     if oracle_checkpoint is None:
@@ -260,12 +375,27 @@ def main(cfg: DictConfig) -> None:
             "Override requis : `oracle_checkpoint=path/to/oracle.ckpt` "
             "(produit par phase1_metrologie.run V1)"
         )
+    if not Path(oracle_checkpoint).is_file():
+        raise SystemExit(
+            f"Checkpoint introuvable : {oracle_checkpoint}. "
+            f"Vérifier le path passé en override."
+        )
 
     # output dir local pour les dumps (sera log comme MLflow artifact)
     output_dir = Path(OmegaConf.select(cfg, "extraction.output_dir")
                       or "/tmp/phase1_extract_v2")
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Dumps locaux → {output_dir}", flush=True)
+
+    resume_skip_existing = bool(
+        OmegaConf.select(cfg, "extraction.resume_skip_existing") or False
+    )
+    if resume_skip_existing:
+        print(
+            "[resume] resume_skip_existing=true : buckets déjà extraits "
+            "et valides seront sautés.",
+            flush=True,
+        )
 
     vocab = Vocab(n_ops=cfg.ssg.n_ops, n_noise=cfg.ssg.n_noise)
 
@@ -326,6 +456,12 @@ def main(cfg: DictConfig) -> None:
         repo=REPO_ROOT,
     )
     write_manifest(manifest, REPO_ROOT)
+    if manifest.git_dirty:
+        _stderr(
+            "[manifest] git_dirty=True → status=exploratory. Le run ne "
+            "comptera pas comme registered strict. Commit avant relance "
+            "pour obtenir registered."
+        )
 
     t0 = time.perf_counter()
     hankel_tau = float(cfg.thresholds_phase1.hankel.tau)
@@ -338,18 +474,53 @@ def main(cfg: DictConfig) -> None:
         phase="1", sprint=cfg.sprint, domain=cfg.domain,
         status=manifest.status,
     ):
-        log_yaml_config(OmegaConf.to_container(cfg, resolve=True))  # type: ignore[arg-type]
-        mlflow.log_params({
-            "oracle_checkpoint": str(oracle_checkpoint),
-            "n_audit_examples": len(audit_indices),
-            "n_seq_len_buckets": len(seq_len_groups),
-            "batch_size_cap": cap_batch,
-            "extractor_fp64": extractor_cfg.fp64,
-        })
+        _safe_mlflow(
+            "log_yaml_config",
+            log_yaml_config,
+            OmegaConf.to_container(cfg, resolve=True),
+        )
+        _safe_mlflow(
+            "log_params",
+            mlflow.log_params,
+            {
+                "oracle_checkpoint": str(oracle_checkpoint),
+                "n_audit_examples": len(audit_indices),
+                "n_seq_len_buckets": len(seq_len_groups),
+                "batch_size_cap": cap_batch,
+                "extractor_fp64": extractor_cfg.fp64,
+                "resume_skip_existing": str(resume_skip_existing),
+                "git_dirty": str(manifest.git_dirty),
+            },
+        )
 
         n_dumps_saved = 0
+        n_dumps_skipped = 0
+        total_bytes = 0
         for seq_len in sorted(seq_len_groups.keys()):
             indices = seq_len_groups[seq_len]
+            dump_path = output_dir / f"audit_dump_seq{seq_len}.pt"
+
+            # Resume : skip si dump existant et valide
+            if resume_skip_existing and dump_path.exists():
+                if _validate_existing_dump(
+                    dump_path, expected_seq_len=seq_len,
+                    expected_L=cfg.model.n_layers,
+                ):
+                    size_b = dump_path.stat().st_size
+                    total_bytes += size_b
+                    print(
+                        f">>> Bucket seq_len={seq_len} : SKIP (dump existant "
+                        f"valide, {size_b / 1e6:.1f} MB)",
+                        flush=True,
+                    )
+                    _safe_mlflow(
+                        f"log_artifact existing {dump_path.name}",
+                        mlflow.log_artifact,
+                        str(dump_path), artifact_path="audit_dumps",
+                    )
+                    n_dumps_skipped += 1
+                    continue
+
             subset = Subset(sweep_full, indices)
             batch_size = _adaptive_batch_size(
                 seq_len, L=cfg.model.n_layers, H=cfg.model.n_heads,
@@ -360,6 +531,7 @@ def main(cfg: DictConfig) -> None:
                 f"batch_size={batch_size} (cap={cap_batch})",
                 flush=True,
             )
+            _print_resource_snapshot(f"  [resources pre seq={seq_len}]")
             t_bucket = time.perf_counter()
             dump = _extract_bucket(
                 extractor, subset, pad_id=vocab.PAD, query_id=vocab.QUERY,
@@ -372,27 +544,49 @@ def main(cfg: DictConfig) -> None:
                 flush=True,
             )
 
-            dump_path = output_dir / f"audit_dump_seq{seq_len}.pt"
+            # Sauvegarde disque AVANT MLflow log_artifact : disque = source de
+            # vérité, MLflow upload est optionnel.
             torch.save(dump, dump_path)
+            size_b = dump_path.stat().st_size
+            total_bytes += size_b
             print(
                 f"    dump sauvegardé : {dump_path} "
-                f"({dump_path.stat().st_size / 1e6:.1f} MB)",
+                f"({size_b / 1e6:.1f} MB)",
                 flush=True,
             )
-            mlflow.log_artifact(str(dump_path), artifact_path="audit_dumps")
+            _safe_mlflow(
+                f"log_artifact {dump_path.name}",
+                mlflow.log_artifact,
+                str(dump_path), artifact_path="audit_dumps",
+            )
             n_dumps_saved += 1
 
             _log_bucket_metrics(dump, seq_len=seq_len, hankel_tau=hankel_tau)
 
             # Libérer activement le dump avant le bucket suivant (gros tensors FP64)
             del dump
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-        mlflow.log_metric("n_dumps_saved", n_dumps_saved)
+        _safe_mlflow(
+            "log_metric n_dumps_saved",
+            mlflow.log_metric, "n_dumps_saved", n_dumps_saved,
+        )
+        _safe_mlflow(
+            "log_metric n_dumps_skipped",
+            mlflow.log_metric, "n_dumps_skipped", n_dumps_skipped,
+        )
+        _safe_mlflow(
+            "log_metric total_bytes_dumps",
+            mlflow.log_metric, "total_bytes_dumps", total_bytes,
+        )
         finalize_manifest(manifest, duration_s=time.perf_counter() - t0,
                           repo_root=REPO_ROOT)
         print(
-            f"\nExtraction V2 terminée : {n_dumps_saved} dumps "
-            f"({time.perf_counter()-t0:.1f}s total)",
+            f"\n=== Extraction V2 terminée === "
+            f"{n_dumps_saved} dumps écrits, {n_dumps_skipped} sautés, "
+            f"{total_bytes/1e9:.2f} GB total, "
+            f"{time.perf_counter()-t0:.1f}s wall-clock",
             flush=True,
         )
 

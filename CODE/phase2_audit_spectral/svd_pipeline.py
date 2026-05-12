@@ -4,16 +4,26 @@ svd_pipeline.py — pipeline SVD batché FP64 sur matrices d'attention audit_svd
 Spec : DOC/02 §2.1, DOC/01 §8.4 (extraction FP64), §8.7 (pas d'agrégation pré-SVD).
 
 Pour chaque matrice A (par couche, par tête, par exemple) :
-- SVD complète FP64
+- SVD complète FP64 (CPU) ou FP32 (GPU consumer Blackwell, où FP64 = 1/64)
 - Calcul de r_eff(θ) pour θ ∈ {0.95, 0.99}
   r_eff(θ) = nombre minimum de valeurs singulières expliquant ≥ θ de la variance
 
 Sortie : tensor (L, B, H) ou (B, H) par couche selon mode.
+
+Choix précision/device (DOC/carnet 2026-05-11 fin de journée) :
+- CPU FP64 : référence stricte (spec DOC/01 §8.4). Lent mais sans perte.
+- GPU FP32 : optionnel via `device="cuda", precision="fp32"`. Pour
+  consumer Blackwell (RTX 5090), FP64 GPU est ~1/64 du FP32 → CPU est
+  comparable et plus simple. FP32 GPU est ~50-100× plus rapide ; pour
+  un compteur r_eff(θ) qui ne dépend que de l'ordre des valeurs
+  singulières, la précision FP32 est largement suffisante.
 """
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -21,19 +31,15 @@ import torch
 def r_eff_from_singular_values(s: torch.Tensor, theta: float) -> torch.Tensor:
     """r_eff(θ) à partir des valeurs singulières.
 
-    s : (..., k) FP64. Retourne (..., ) int : plus petit r tel que
-    Σ_{i<r} s_i² / Σ s² ≥ θ.
+    s : (..., k) en n'importe quelle précision flottante. Retourne (..., )
+    int : plus petit r tel que Σ_{i<r} s_i² / Σ s² ≥ θ.
     """
     s2 = s.pow(2)
     cumsum = s2.cumsum(dim=-1)
     total = s2.sum(dim=-1, keepdim=True).clamp_min(1e-30)
     ratio = cumsum / total
-    # premier index où ratio ≥ θ
-    # on ajoute 1 car r_eff = nombre de valeurs requises (pas l'index)
     above = ratio >= theta
-    # argmax retourne premier True
     r_eff = above.float().argmax(dim=-1) + 1
-    # corner case : si toutes les valeurs sont 0, ratio = 0 partout, argmax retourne 0
     all_zero = (s2.sum(dim=-1) == 0)
     r_eff = torch.where(all_zero, torch.zeros_like(r_eff), r_eff)
     return r_eff
@@ -42,21 +48,80 @@ def r_eff_from_singular_values(s: torch.Tensor, theta: float) -> torch.Tensor:
 @dataclass
 class SVDResult:
     """Résultat SVD pour une matrice d'attention."""
-    s: torch.Tensor       # valeurs singulières FP64 (..., k)
+    s: torch.Tensor       # valeurs singulières (..., k)
     r_eff_95: torch.Tensor   # entier
     r_eff_99: torch.Tensor
 
 
-def svd_attention(A: torch.Tensor, *, theta_values: tuple[float, ...] = (0.95, 0.99)) -> dict[str, torch.Tensor]:
-    """SVD batché FP64 sur (..., M, N).
+PrecisionMode = Literal["fp64", "fp32"]
+DeviceMode = Literal["cpu", "cuda", "auto"]
 
-    Retourne {"s": ..., "r_eff_<θ>": ...}. r_eff arrondi entier.
+
+def _resolve_device(device: DeviceMode, fallback: str) -> str:
+    if device == "auto":
+        return "cuda" if torch.cuda.is_available() else fallback
+    if device == "cuda" and not torch.cuda.is_available():
+        print(
+            "[svd_pipeline] device='cuda' demandé mais CUDA indisponible, "
+            "fallback sur CPU.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return "cpu"
+    return device
+
+
+def svd_attention(
+    A: torch.Tensor,
+    *,
+    theta_values: tuple[float, ...] = (0.95, 0.99),
+    device: DeviceMode = "auto",
+    precision: PrecisionMode = "fp64",
+) -> dict[str, torch.Tensor]:
+    """SVD batché sur (..., M, N).
+
+    Par défaut : suit le device source de A et reste en FP64 (spec stricte).
+    Pour accélérer sur GPU consumer Blackwell, appeler avec
+    `device="cuda", precision="fp32"`.
+
+    Retourne {"s": ..., "r_eff_<θ>": ...} sur le device d'entrée
+    (re-déplacement explicite). r_eff arrondi int.
+
+    Lève RuntimeError avec contexte si la SVD ne converge pas (cuSolver), pour
+    éviter des sorties silencieuses sur des matrices rank-deficient.
     """
-    A_fp64 = A.to(torch.float64)
-    s = torch.linalg.svdvals(A_fp64)  # (..., min(M,N))
-    out: dict[str, torch.Tensor] = {"s": s}
+    src_device = A.device
+    target_device = _resolve_device(device, fallback=str(src_device))
+    target_dtype = torch.float64 if precision == "fp64" else torch.float32
+
+    A_work = A.to(device=target_device, dtype=target_dtype)
+    try:
+        s = torch.linalg.svdvals(A_work)
+    except (RuntimeError, torch._C._LinAlgError) as exc:
+        # cuSolver SVD non-convergent sur matrices très rank-deficient :
+        # fallback connu eigvalsh(A A.T + εI) (cf. carnet 2026-05-11 §Run 3).
+        msg = (
+            f"[svd_pipeline] torch.linalg.svdvals a échoué sur tensor "
+            f"shape={tuple(A_work.shape)} dtype={target_dtype} "
+            f"device={target_device} : {exc}. "
+            f"Fallback eigvalsh(A A.T + εI)."
+        )
+        print(msg, file=sys.stderr, flush=True)
+        eps = 1e-12 if target_dtype == torch.float64 else 1e-7
+        AAt = A_work @ A_work.transpose(-2, -1)
+        # ridge diagonale ; eye broadcasté
+        eye = torch.eye(
+            AAt.size(-1), dtype=target_dtype, device=target_device
+        )
+        AAt = AAt + eps * eye
+        eigvals = torch.linalg.eigvalsh(AAt)
+        # eigvalsh retourne ascendant → flip et clamp puis racine.
+        s2 = eigvals.flip(-1).clamp_min(0)
+        s = s2.sqrt()
+
+    out: dict[str, torch.Tensor] = {"s": s.to(src_device)}
     for theta in theta_values:
-        out[f"r_eff_{int(theta*100)}"] = r_eff_from_singular_values(s, theta)
+        out[f"r_eff_{int(theta*100)}"] = r_eff_from_singular_values(s, theta).to(src_device)
     return out
 
 
@@ -67,10 +132,6 @@ def hankelize_attention_lines(A: torch.Tensor) -> torch.Tensor:
     *batch_dims, M, N = A.shape
     p = N // 2
     q = N - p + 1
-    # H[i, ., .] avec H[i,a,b] = A[i, a+b] sur [i, N) — convention causale
-    # Pour simplicité on construit la Hankel sur la ligne entière A[i, :] sans
-    # restriction causale. Les lignes triangulaires inférieures ont moins de
-    # contenu mais la Hankel reste définie.
     H = torch.empty(*batch_dims, M, p, q, dtype=A.dtype, device=A.device)
     for a in range(p):
         H[..., :, a, :] = A[..., :, a : a + q]
