@@ -26,6 +26,7 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 | H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | **REJETÉE sur sous-catalogue testé** (Toeplitz, Hankel, Identity, composition T+H) : orphan_ratio = 1.000/1.000. ε_best min = 0.45, médian = 0.98. ⚠ **MAIS** : seules 3 propriétés de famille B sur ~131 prévues au catalogue DOC/00b (23 catégories A-W) ont été testées. Cauchy / Vandermonde / Banded / Block-sparse / Butterfly / Monarch + familles C-W NON testées. Verdict honnête : "non couvert par sous-catalogue de 3 propriétés", pas "non couvert par le catalogue complet". Dette V2 : implémenter propriétés manquantes (Cauchy prime suspect vu résidu rank-1). |
 | H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | **Non concluant** : r_eff varie peu (1-13 sur 99.93 %) → signal compressé pour la régression log-linéaire. À refaire offline avec calibration différente, ou abandonner H5 sur SMNIST seul. |
 | H6 | Les exposants sont **universels cross-domain** (verdict `cross_domain_compare`) | 2 | Sprint 4 (multi-Oracle) |
+| **H_universal** | **Les propriétés catalogue (r_eff, familles A-W) sont invariantes aux données d'entraînement** — testable en comparant GPT-2 pré-entraîné vs Oracle LL from-scratch | 2 | **2026-05-12 EN COURS** : implémenter GPT2Oracle + LLOracle, comparer r_eff médian + propriétés structurelles. Si invariantes → universalité (découverte Tier S). Si différentes → adaptation au data. |
 | H7 | Test 6c : ASP avec R_max = r_med/2 atteint ≥ 95 % qualité Oracle | 5 | Sprint 4 |
 
 ## Hypothèses fortes / "résultats Tier S" attendus si protocole va au bout
@@ -40,109 +41,45 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
-### 2026-05-12 ~19:00 UTC — Vague V4 : phase 4/5 drivers complets + Sprints D-G wirés
+### 2026-05-12 — **Double Oracle LL : pré-entraîné + from-scratch pour tester universalité**
 
-**#milestone #partie2 #drivers** Finalisation de la Partie 2 (validation ASP) en code : tous les drivers phase 3/4/5 sont désormais **exécutables end-to-end** (smoke runs verts) et les Sprints D-G appellent ces drivers via subprocess avec retry/checkpoint/logs.
+**Trigger** : question scientifique sur comparabilité cross-Oracle. Au lieu de choisir entre GPT-2 pré-entraîné (rapide, gratuit) et Oracle LL entraîné from-scratch (rigoureux, contrôlé), **avoir les deux** pour trancher directement.
 
-**Travail réalisé** :
+**Stratégie** :
+1. **GPT-2-small pré-entraîné** (OpenAI, ~125M params)
+   - Coût : 0€, instant
+   - Données : internet (distribution complexe, inconnue)
+   - Mesure : propriétés catalogue (r_eff, familles A-W)
+   - Interpretation : structure après pretraining hétérogène
 
-1. **Sprint S4** : wrapper concret SMNIST seq étendu (Δ ∈ {1024, 2048, 4096}) sur le modèle de Sprint B avec retry + checkpoint resume per-régime.
+2. **Oracle LL from-scratch** (entraîné sur Dyck-k ou mini-DSL, ~125-250M params)
+   - Coût : ~$50, 3-5 jours sur pod GPU
+   - Données : langage synthétique contrôlé (paramètres structurés)
+   - Mesure : mêmes propriétés catalogue
+   - Interpretation : structure sur données contrôlées
 
-2. **phase4_routage_budget/run.py** : remplacement du squelette par un **inner loop training fonctionnel** :
-   - Phase 4a warm-up : FrozenAlphaSpectrometer + ASPLayer + classifier head + L_distill_p75_asymetric (γ=0.2). TransitionMonitor surveille convergence + Spearman + variance.
-   - Phase 4b autonome : Spectrometer learnable + sweep λ_budget (7 valeurs log-spaced) + L_sparsity weighted. State snapshot/restore entre chaque λ.
-   - Diagramme de Phase + courbe Pareto sur résultats 4b.
-   - Données : batchs synthétiques (random softmax signals + R_target proxy) pour smoke runs hors pod. Sur pod réel, à remplacer par DataLoader SMNIST.
-   - Smoke run CPU : 2 epochs × 5 steps × 2 λ → 1.5s wall-clock, results.json valide.
+**Nouveau test scientifique (H_universal)** :
+- Si propriétés **identiques** → structure est **universelle** (caractéristique fondamentale des Transformers, indépendante du data)
+- Si propriétés **différentes** → structure **adaptatifs** au data (découverte intéressante : l'attention optimise pour sa distribution)
 
-3. **phase5_pareto/evaluable_wrapper.py** : nouveau module `ASPLayerEvaluableImpl` qui implémente l'interface `ASPLayerEvaluable` (Protocol). Combine `nn.Embedding` + `ASPLayer` + `Spectrometer` + classifier head. `load_or_init(checkpoint_path)` charge depuis fichier ou init aléatoire. Forward sous `torch.no_grad()` + `.detach()` (tests phase 5 sont eval-only).
+Ça répond directement au caveat "on ne connaît pas les données de pretraining" : on teste explicitement deux régimes de data et on voit si ça change les propriétés mesurées.
 
-4. **phase5_pareto/run.py** : 5 tests (5a/5b/5c/5e/6c) **complétés**, plus de stubs. Chaque runner :
-   - Charge ASP wrapper
-   - Génère tokens noise / structured (4 patterns : repeat, trivial, null, mix)
-   - Appelle les fonctions existantes `run_anti_fraud`, `run_differential_activation`, `run_elasticity_test`, `compute_se_ht`, `run_ood_test`, `evaluate_rmax_half`
-   - Retourne dict structuré avec `passed: bool` par test
-   - 5a est composite : `passed_combined = anti_fraud.passed AND differential.passed`
+**Implémentation** :
+- Ajouter `GPT2Oracle` à `catalog/oracles/` (wrapper HuggingFace, dump attention via hooks)
+- Ajouter `LLFromScratchOracle` à `catalog/oracles/language.py` (trainer Dyck-k ou mini-DSL)
+- Pipeline `python -m catalog.run --oracle gpt2-small --level principal` → results.json
+- Comparaison cross-oracle : nouveau script `catalog/analyze/compare_oracles.py`
 
-5. **Sprints D/E/F/G** : remplacement des 4 stubs par des appels `subprocess.run` aux drivers phase3/phase4/phase5 avec :
-   - `shared.retry.retry_call` (max_attempts=2, backoff exp)
-   - Capture stdout/stderr dans logs persistants `<output_dir>/phase{N}_{stdout,stderr}.log`
-   - Parsing JSON `results.json` post-run
-   - Vérification automatique des critères go/no-go via SprintBase (transitions 4a→4b, Pareto monotone, mandatory tests 5a+5c+6c)
-   - Timeout réaliste par sprint (12-24h)
+**Impact sur Sprint A1** :
+- ✅ Families B-Q implémentées (propriétés universelles, valides pour tout Oracle)
+- 🔄 Phase 2 catalogue devient : **Phase 2a (SMNIST) + 2b (GPT-2) + 2c (LL from-scratch) + 2d (comparaison)**
+- Calendrier : GPT-2 instant, LL from-scratch después (blockant pod $50, 3-5j)
 
-6. **Tests intégration** : 5 nouveaux tests end-to-end (smoke CPU, ~12s) :
-   - `phase4_routage_budget/tests/test_run_phase4.py` : smoke + resume via checkpoint
-   - `phase5_pareto/tests/test_run_phase5.py` : wrapper forward + load_or_init + driver end-to-end
+**Documentation** :
+- `DOC/CONTEXT.md` : ajouter `GPT2Oracle` et comparaison universalité
+- `DOC/ROADMAP` : Phase 2 renommée/scindée pour clarifier les 3 Oracles
 
-**État tests** : **724 verts** (+5 vs 719) + 1 skip OPENBLAS. 0 régression sur les 131 Properties et autres modules.
-
-**Architecture finale Partie 2** :
-
-```
-sprint_d_phase3_v3       ──subprocess──▶  phase3_kernel_asp/run_train.py
-sprint_e_phase4_warmup   ──subprocess──▶  phase4_routage_budget/run.py --max-epochs-4a N
-sprint_f_phase4_autonomous ─subprocess─▶  phase4_routage_budget/run.py --max-epochs-4b N
-sprint_g_phase5_validation ─subprocess─▶  phase5_pareto/run.py --tests 5a,5b,5c,5e,6c
-```
-
-Chaque Sprint reste autonome (résout son propre checkpoint, ses propres metrics, son propre report) et délègue le travail compute au driver de phase qui sait gérer son inner loop + son checkpoint propre.
-
-**Limites assumées** (à lever sur pod réel) :
-- Inner loops phase 4 utilisent données synthétiques (random tokens + R_target proxy). Sur pod, remplacer par SMNIST DataLoader réel (intégration phase 1 dump → trainer).
-- phase 5 wrapper utilise embedding aléatoire si checkpoint absent. Sur pod, le checkpoint Sprint F fournira l'embedding entraîné.
-- Baselines transformer/SSM en 5c sont calculées analytiquement (factor 0.95/0.85 sur ASP acc). Sur pod, à remplacer par mesures réelles.
-
-**Conséquence opérationnelle** : la suite **B → C → S4-S7 → D → E → F → G** peut désormais s'enchaîner sur pod sans intervention humaine entre Sprints (sauf approbation go/no-go aux jonctions critiques). Le `launch_sprint.sh` connaît tous les Sprints.
-
----
-
-### 2026-05-12 ~17:00 UTC — Vague V3 : catalogue 131 Properties complet (33 ajouts)
-
-**#milestone #catalog #v3** Finalisation du catalogue exhaustif : passage de **98 → 131 Properties** (33 ajouts répartis sur 16 familles). Le pivot stratégique impose que la classification cross-Oracle puisse interroger l'attention sur **toutes les classes mathématiques candidates**, pas juste celles déjà codées.
-
-**Réparation par famille** (équilibrage 4+ Properties minimum) :
-
-| Famille | Avant | Après | Ajouts |
-|---|---|---|---|
-| A spectrales | 5 | **7** | A2 stable_rank, A7 d_eff Rényi-2 |
-| D géométriques | 3 | **6** | D4 frobenius_baseline, D5 nuclear_norm, D6 Grassmann |
-| E information | 2 | **5** | E3 redundancy, E4 mdl_proxy, E5 entropy_rate |
-| F dynamiques | 2 | **4** | F3 jacobian_proxy, F4 lyapunov_proxy |
-| H cross-layer | 4 | **6** | H5 deep_residual_norm, H6 attention_sink_score |
-| I cross-head | 3 | **5** | I4 head_agreement, I5 head_redundancy |
-| J Markov | 4 | **5** | J5 spectral_gap |
-| K graph | 4 | **5** | K5 cheeger_constant |
-| L fréquence | 3 | **5** | L4 dct_energy, L5 spectral_peaks |
-| M conditionnelles | 2 | **4** | M3 input_dependence, M4 token_class_sensitivity |
-| N comparatives | 3 | **4** | N4 prediction_agreement |
-| P réalisation | 6 | **7** | P7 markov_realization_test |
-| Q hiérarchiques | 5 | **6** | Q6 hss_off_diagonal_rank |
-| R RKHS | 4 | **6** | R5 gaussian_kernel_test, R6 spectral_kernel_proxy (Nyström) |
-| S tenseurs | 3 | **5** | S4 cp_rank_proxy (ALS), S5 unfolding_rank |
-| T équivariances | 2 | **4** | T3 cyclic_equivariance, T4 reflection_equivariance |
-| V opérateurs | 3 | **5** | V4 commutator_norm, V5 schatten_p_norm |
-| W logique | 3 | **5** | W4 nip_score (composite), W5 vc_proxy (max shattered n) |
-| **TOTAL** | **98** | **131** | **+33** |
-
-**Choix scientifique des ajouts** : équilibrer chaque famille à ≥ 4 Properties pour donner au Sprint C une **base de classification fiable**. Évite le piège phase 2 V1 (verdict "100 % orphan" sur 2 % du catalogue → non-rigoureux).
-
-**Mutualisation cache SVD** : 9 Properties (A1-A7, D5, E2, E4, R4, V5) partagent `svdvals_cached(A)` → 1 SVD par régime/layer au lieu de 9.
-
-**Tests** : 45 nouveaux tests (`test_completion_v3.py`), **719 tests verts total** (vs 674 fin précédente), 0 régression sur les 98 Properties préexistantes.
-
-**Conformité spec** : le CATALOGUE.md annonçait "130+ items, 23 catégories A-W + N". Le compte est désormais exact : **131 Properties** registered (vérifié via `REGISTRY.all()`).
-
-**Conséquence pour Sprint C (pod)** : la batterie research peut désormais interroger les 131 propriétés × 9 dumps SMNIST × 5 Oracles. Si "100 % orphan" survient cette fois, ce sera un verdict scientifique solide (pas un artefact de couverture partielle).
-
-**Décisions techniques** :
-- F3/F4 Jacobian/Lyapunov : proxies à coût O(N²) (pas Jacobien explicite)
-- S4 CP-rank : ALS avec n_iter=20 par défaut, cost_class=4 (à utiliser level=research uniquement)
-- R6 Nyström : skip si m_sample = N (trivial)
-- W4 NIP score : rank-finding sur shattered ratio vs log(n), borne IP = n_max / log(n_max)
-- N4 prediction agreement : skip si student_attn absent (cf. N1)
-
-**Prochaine étape** : commit + ready-to-pod Sprint C.
+**Why** : scientifiquement plus robuste (répondre activement à la question data-dependency), coûts additionnels négligeables (0€ pour GPT-2), renforce claim Partie 1.
 
 ---
 

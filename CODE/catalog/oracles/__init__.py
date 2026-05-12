@@ -24,6 +24,9 @@ def __getattr__(name: str):
     if name == "SMNISTOracle":
         from catalog.oracles.smnist import SMNISTOracle
         return SMNISTOracle
+    if name in ("GPT2Oracle", "GPT2_VARIANTS"):
+        import catalog.oracles.gpt2 as m
+        return getattr(m, name)
     if name in ("LLOracle", "LLModelSpec", "MinimalLMBackend", "HFLanguageBackend"):
         import catalog.oracles.language as m
         return getattr(m, name)

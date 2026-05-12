@@ -119,7 +119,13 @@ class SprintBase(ABC):
     # ------------------------------------------------------------------
 
     def run(self) -> SprintResult:
-        """Exécute le Sprint. Capture errors, gère checkpoint/resume + logging."""
+        """Exécute le Sprint. Capture errors, gère checkpoint/resume + logging.
+
+        Capture en plus de Exception : MemoryError (OOM Python-level) et
+        KeyboardInterrupt sont loggés et propagés au top-level dispatcher
+        (run.py main()) pour produire un summary.json même en cas de mort
+        violente.
+        """
         self.logger.info("=== Sprint %s : START ===", self.sprint_id)
         if self._checkpoint_resumed:
             self.logger.info(
@@ -137,20 +143,45 @@ class SprintBase(ABC):
             self._result.status = SprintStatus.SKIPPED
             self._result.error = str(e)
             self.logger.warning("[%s] SKIPPED : %s", self.sprint_id, e)
+        except MemoryError as e:
+            self._result.status = SprintStatus.FAILED
+            self._result.error = f"MemoryError: {e}"
+            self.logger.exception("[%s] OOM (MemoryError) : %s", self.sprint_id, e)
+            # On laisse propager après finally pour que run.py top-level
+            # le voie et exit 137 (convention OOM)
+            self._safe_finalize(t0)
+            raise
+        except KeyboardInterrupt as e:
+            self._result.status = SprintStatus.FAILED
+            self._result.error = f"KeyboardInterrupt: {e}"
+            self.logger.warning("[%s] interrupted (Ctrl-C)", self.sprint_id)
+            self._safe_finalize(t0)
+            raise
         except Exception as e:
             self._result.status = SprintStatus.FAILED
             self._result.error = f"{type(e).__name__}: {e}"
             self.logger.exception("[%s] FAILED : %s", self.sprint_id, e)
         finally:
-            self._result.duration_seconds = time.time() - t0
-            self._write_summary()
-            self._teardown_mlflow()
+            self._safe_finalize(t0)
         self.logger.info(
             "=== Sprint %s : %s (%.1fs) ===",
             self.sprint_id, self._result.status.value.upper(),
             self._result.duration_seconds,
         )
         return self._result
+
+    def _safe_finalize(self, t_start: float) -> None:
+        """Écrit summary.json + ferme MLflow, en avalant toute exception
+        (le finally NE DOIT PAS masquer l'exception originelle)."""
+        try:
+            self._result.duration_seconds = time.time() - t_start
+            self._write_summary()
+        except Exception as exc:  # noqa: BLE001
+            self.logger.error("[%s] _write_summary KO : %s", self.sprint_id, exc)
+        try:
+            self._teardown_mlflow()
+        except Exception as exc:  # noqa: BLE001
+            self.logger.error("[%s] _teardown_mlflow KO : %s", self.sprint_id, exc)
 
     # ------------------------------------------------------------------
     # Subclass API

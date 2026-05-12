@@ -124,13 +124,20 @@ class SMNISTOracle(AbstractOracle):
         Génère un mini-dataset SSG en local, forward sur l'Oracle, capture
         l'attention par couche en FP64 (ou FP32 selon ExtractorConfig).
         """
+        import logging
+        logger = logging.getLogger("catalog.oracles.smnist")
+
         if regime.omega is None or regime.delta is None:
             raise ValueError(
                 f"SMNISTOracle requiert regime.omega et regime.delta non-null, "
                 f"reçu {regime}"
             )
 
-        # Mini-dataset SSG ad-hoc pour ce régime
+        logger.info(
+            "[smnist] extract_regime ω=%d Δ=%d n_ex=%d",
+            regime.omega, regime.delta, n_examples,
+        )
+
         cfg = StructureMNISTConfig(
             omega=int(regime.omega),
             delta=int(regime.delta),
@@ -154,7 +161,11 @@ class SMNISTOracle(AbstractOracle):
         tokens_chunks: list[torch.Tensor] = []
         query_chunks: list[torch.Tensor] = []
 
-        for batch in loader:
+        for batch_idx, batch in enumerate(loader):
+            logger.info(
+                "[smnist] batch %d ω=%d Δ=%d : forward + extract per-layer",
+                batch_idx, regime.omega, regime.delta,
+            )
             tokens = batch["tokens"]
             qpos = find_query_positions(tokens, self.vocab.QUERY)
             for layer_dump in self._extractor.extract_per_layer(
@@ -169,6 +180,10 @@ class SMNISTOracle(AbstractOracle):
             query_chunks.append(qpos.cpu())
 
         attn_stacked = [torch.cat(chunks, dim=0) for chunks in per_layer_chunks]
+        logger.info(
+            "[smnist] extract_regime ω=%d Δ=%d done : %d layers stacked",
+            regime.omega, regime.delta, len(attn_stacked),
+        )
         return AttentionDump(
             attn=attn_stacked,
             omegas=torch.cat(omegas_chunks, dim=0),
