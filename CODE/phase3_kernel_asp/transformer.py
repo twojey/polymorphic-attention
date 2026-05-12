@@ -40,6 +40,7 @@ class ASPTransformerConfig:
     init_strategy: str = "xavier"  # xavier | orthogonal | smart
     backbone_class: str = "identity"  # à raffiner post-phase-2
     backbone_params: dict = field(default_factory=dict)
+    delta_attn_mode: str = "linear"  # linear (V1 spec) | attention (V2 token-mixing)
 
 
 def _sinusoidal_positions(max_len: int, d: int) -> torch.Tensor:
@@ -93,6 +94,7 @@ class ASPBlock(nn.Module):
                 soft_mask_beta=cfg.soft_mask_beta,
                 layernorm=False,  # LN externe à la résiduelle
                 init_strategy=cfg.init_strategy,
+                delta_attn_mode=cfg.delta_attn_mode,
             ),
             backbone=backbone,
             matriochka_init=matriochka_init,

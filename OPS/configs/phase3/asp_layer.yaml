@@ -69,6 +69,10 @@ asp_layer:
   init_strategy: xavier     # xavier | orthogonal | smart
   smart_init_K_per_layer: 16
   smart_init_k_per_head: 2
+  # Mode V2 (2026-05-12) — ΔAttn comme attention low-rank token-token.
+  # "linear" (spec V1) = projection U·m·V^T·x indépendante par token (échec phase 3 v1
+  # car pas de token-mixing). "attention" (V2) = softmax((x·U·m)(x·V·m)^T)·x.
+  delta_attn_mode: attention
 
 # --- Training ---
 training:

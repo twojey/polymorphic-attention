@@ -32,6 +32,10 @@ class ASPLayerConfig:
     soft_mask_beta: float = 4.0
     layernorm: bool = True
     init_strategy: str = "xavier"
+    # Mode V2 (2026-05-12) : choix entre projection linéaire (V1 spec, sans
+    # interaction token-token) et attention low-rank (Q = x·U, K = x·V,
+    # softmax(QK^T)·x). V1 ne pouvait pas apprendre SMNIST faute de mixing.
+    delta_attn_mode: str = "linear"  # "linear" (V1 spec) | "attention" (V2)
 
 
 class ASPLayer(nn.Module):
@@ -76,7 +80,10 @@ class ASPLayer(nn.Module):
         backbone_out = self.backbone(x)
         if r == 0:
             return self.norm(backbone_out)
-        delta = self.matriochka.correction(x, r)
+        if self.cfg.delta_attn_mode == "attention":
+            delta = self._matriochka_attention(x, r)
+        else:
+            delta = self.matriochka.correction(x, r)
         return self.norm(backbone_out + delta)
 
     def _matriochka_correction_per_token(
@@ -84,17 +91,64 @@ class ASPLayer(nn.Module):
     ) -> torch.Tensor:
         """ΔAttn par token avec masque continu m : (B, N, R_max).
 
-        Calcul : (B, N, d) → on projette via Σ_i m_i · u_i ⊗ v_i.
+        Mode V1 ("linear"): ΔAttn = Σ_i m_{t,i} · u_i v_iᵀ x (projection
+            linéaire conditionnelle au token, PAS d'interaction token-token).
+        Mode V2 ("attention"): ΔAttn = softmax((x·U·m) (x·V·m)ᵀ / √r) · x
+            (vraie attention low-rank avec mask Matriochka).
         """
-        # weight_per_token[b, t] = U @ diag(m[b, t]) @ V^T = (U * m[b,t]) @ V^T
-        # On fait un einsum efficace.
-        # x : (B, N, d), U : (d, R), V : (d, R), m : (B, N, R)
+        if self.cfg.delta_attn_mode == "attention":
+            return self._matriochka_attention_with_mask(x, m)
+        # V1 path (linear)
         U = self.matriochka.U_max  # (d, R_max)
         V = self.matriochka.V_max  # (d, R_max)
-        # V^T x : (B, N, R)
         Vx = torch.einsum("bnd,dr->bnr", x, V)
-        # appliquer m : (B, N, R) * (B, N, R) → (B, N, R)
         weighted = Vx * m
-        # U @ result : (B, N, d)
         out = torch.einsum("bnr,dr->bnd", weighted, U)
+        return out
+
+    def _matriochka_attention(self, x: torch.Tensor, r: int) -> torch.Tensor:
+        """Attention low-rank au rang exact r (sanity + L_matriochka).
+
+        U_max[:, :r] et V_max[:, :r] servent de projections key/query :
+            Q = x @ U[:, :r]   (B, N, r)
+            K = x @ V[:, :r]   (B, N, r)
+            scores = Q Kᵀ / √r → (B, N, N)
+            A = softmax(scores)
+            out = A @ x → (B, N, d)
+        """
+        if r == 0:
+            return torch.zeros_like(x)
+        U_r = self.matriochka.U_max[:, :r]  # (d, r)
+        V_r = self.matriochka.V_max[:, :r]
+        Q = x @ U_r              # (B, N, r)
+        K = x @ V_r              # (B, N, r)
+        scores = Q @ K.transpose(-2, -1) / max(r, 1) ** 0.5  # (B, N, N)
+        A = torch.softmax(scores, dim=-1)
+        out = A @ x              # (B, N, d)
+        return out
+
+    def _matriochka_attention_with_mask(
+        self, x: torch.Tensor, m: torch.Tensor
+    ) -> torch.Tensor:
+        """Attention low-rank avec mask continu m : (B, N, R_max).
+
+        Mask appliqué sur les colonnes de U, V après projection :
+            Q_full = x @ U_max  (B, N, R_max)
+            Q_masked = Q_full * m_t (mask par token)
+        Comme m varie par token, on calcule Q et K avec mask broadcasté.
+        """
+        U = self.matriochka.U_max  # (d, R_max)
+        V = self.matriochka.V_max
+        R = self.cfg.R_max
+        Q_full = x @ U             # (B, N, R)
+        K_full = x @ V             # (B, N, R)
+        # Masque par token : m est (B, N, R) → appliquer composante par composante
+        Q = Q_full * m
+        K = K_full * m
+        # Softmax low-rank attention. Le scaling par √R_eff est approximatif :
+        # on prend la somme du mask comme proxy du rang effectif.
+        r_eff = m.sum(dim=-1, keepdim=True).clamp_min(1.0)  # (B, N, 1)
+        scores = Q @ K.transpose(-2, -1) / r_eff.sqrt()  # (B, N, N)
+        A = torch.softmax(scores, dim=-1)
+        out = A @ x
         return out

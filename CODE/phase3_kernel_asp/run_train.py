@@ -301,6 +301,7 @@ def main(cfg: DictConfig) -> None:
         init_strategy=cfg.asp_layer.init_strategy,
         backbone_class=cfg.backbone.class_name,
         backbone_params=OmegaConf.to_container(cfg.backbone.params, resolve=True) or {},
+        delta_attn_mode=str(OmegaConf.select(cfg, "asp_layer.delta_attn_mode") or "linear"),
     )
     asp = ASPTransformer(asp_cfg, matriochka_init_per_layer=matriochka_inits).to(device)
     print(
