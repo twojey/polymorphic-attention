@@ -150,6 +150,7 @@ def diagnose_s_spectral_decoupling(
     seed: int = 0,
     n_boot: int = 1000,
     threshold_decoupling: float = 0.60,
+    max_seq_len: int | None = None,
 ) -> DecouplingDiagnostic:
     """Calcule ρ_Spearman(r_eff_full, S_Spectral_K) par exemple.
 
@@ -201,12 +202,28 @@ def diagnose_s_spectral_decoupling(
     # Mapping (index global) → (index dump local) pour calculer S_Spectral
     # seulement sur les exemples sélectionnés de chaque dump.
     s_spectral_per_example = np.zeros(selected.size, dtype=np.float64)
+    # Tracker quels positions ont effectivement été remplies (pour exclure les
+    # dumps skipés via max_seq_len du Spearman final).
+    filled_mask = np.zeros(selected.size, dtype=bool)
     selected_set = set(selected.tolist())
     selected_to_position = {idx: pos for pos, idx in enumerate(selected.tolist())}
 
     b_offset = 0
     for dump_idx, d in enumerate(dumps):
         B_d = d["attn"][0].size(0)
+        seq_len_d = d["attn"][0].size(2)
+        # Skip explicite des seq_len trop longs (compute_s_spectral O(N) sur
+        # eigvalsh per token devient prohibitif au-delà de ~1000 — cf. carnet
+        # 2026-05-12 stall 25 min sur seq=1287).
+        if max_seq_len is not None and seq_len_d > max_seq_len:
+            print(
+                f"[diagnostic_decoupling] SKIP dump seq_len={seq_len_d} "
+                f"(> max_seq_len={max_seq_len}) — trop coûteux compute_s_spectral.",
+                file=sys.stderr, flush=True,
+            )
+            b_offset += B_d
+            continue
+
         # indices globaux du dump
         global_indices = range(b_offset, b_offset + B_d)
         # indices locaux du dump (sous-ensemble sélectionné)
@@ -237,14 +254,25 @@ def diagnose_s_spectral_decoupling(
         # Placer aux positions correspondantes du vecteur global.
         for local_pos, local_idx in enumerate(local_indices):
             global_idx = b_offset + local_idx
-            s_spectral_per_example[selected_to_position[global_idx]] = sspec_per_ex[local_pos]
+            pos = selected_to_position[global_idx]
+            s_spectral_per_example[pos] = sspec_per_ex[local_pos]
+            filled_mask[pos] = True
 
         b_offset += B_d
+
+    # Filtrer les positions effectivement remplies (exclut les dumps skipés).
+    if filled_mask.sum() < 4:
+        raise ValueError(
+            f"Trop peu d'exemples remplis ({int(filled_mask.sum())}) après "
+            f"max_seq_len filter. Réduire max_seq_len ou max_examples."
+        )
+    s_spectral_per_example = s_spectral_per_example[filled_mask]
+    selected_filtered = selected[filled_mask]
 
     # r_eff agrégé par exemple : moyenne sur (L, H).
     L, _, H = r_eff_per_layer_head_example.shape
     r_eff_per_example_all = r_eff_per_layer_head_example.astype(np.float64).mean(axis=(0, 2))  # (B,)
-    r_eff_per_example = r_eff_per_example_all[selected]
+    r_eff_per_example = r_eff_per_example_all[selected_filtered]
 
     # Spearman global
     rho_global = bootstrap_spearman_ci(
@@ -256,9 +284,9 @@ def diagnose_s_spectral_decoupling(
     # (un seul ω/Δ/ℋ sur le sous-échantillon) sont sautés explicitement —
     # sinon scipy retourne NaN avec un ConstantInputWarning sans dire au caller
     # ce qui s'est passé.
-    omegas_sel = omegas[selected].astype(np.float64)
-    deltas_sel = deltas[selected].astype(np.float64)
-    entropies_sel = entropies[selected].astype(np.float64)
+    omegas_sel = omegas[selected_filtered].astype(np.float64)
+    deltas_sel = deltas[selected_filtered].astype(np.float64)
+    entropies_sel = entropies[selected_filtered].astype(np.float64)
     rho_per_axis: dict[str, SpearmanResult] = {}
     for axis_name, axis_vals in (("omega", omegas_sel), ("delta", deltas_sel), ("entropy", entropies_sel)):
         if np.unique(axis_vals).size < 2:
@@ -283,7 +311,7 @@ def diagnose_s_spectral_decoupling(
     return DecouplingDiagnostic(
         rho_global=rho_global,
         rho_per_axis=rho_per_axis,
-        n_examples_used=int(selected.size),
+        n_examples_used=int(s_spectral_per_example.size),
         K=K, tau=tau,
         threshold_decoupling=threshold_decoupling,
         verdict=verdict,

@@ -432,6 +432,7 @@ def main(cfg: DictConfig) -> None:
             print("\n[decoupling] Diagnostic S_Spectral vs r_eff (sous-échantillonné)…", flush=True)
             _print_resource_snapshot("[decoupling pre]")
             try:
+                _max_seq = OmegaConf.select(cfg, "decoupling.max_seq_len")
                 decoupling_diag = diagnose_s_spectral_decoupling(
                     dumps=dumps,
                     r_eff_per_layer_head_example=r_eff_per_layer_head_example,
@@ -443,6 +444,7 @@ def main(cfg: DictConfig) -> None:
                     threshold_decoupling=float(
                         OmegaConf.select(cfg, "decoupling.threshold") or 0.60
                     ),
+                    max_seq_len=(int(_max_seq) if _max_seq is not None else None),
                 )
                 log_diagnostic_to_mlflow(decoupling_diag, mlflow_module=mlflow)
                 rho = decoupling_diag.rho_global

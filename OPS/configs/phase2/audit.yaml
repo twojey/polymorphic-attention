@@ -40,6 +40,10 @@ decoupling:
   n_boot: 1000           # bootstrap IC95 (≤ phase 1.5 pour rester rapide)
   threshold: 0.60        # ρ < seuil → "decoupled"
   seed: 0
+  # Skip les dumps avec seq_len > max_seq_len (compute_s_spectral O(N) sur
+  # eigvalsh per token devient prohibitif au-delà de ~1000 ; cf. carnet
+  # 2026-05-12 stall 25 min sur seq=1287 → killed).
+  max_seq_len: 500
 
 # --- Loi de transfert ---
 transfer_law:
