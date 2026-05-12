@@ -221,10 +221,16 @@ class SprintBase(ABC):
                 self.logger.warning("MLflow log_metric(%s) KO : %s", key, e)
 
     def _add_artifact(self, path: str | Path, description: str) -> None:
-        """Référence un fichier produit par le Sprint."""
+        """Référence un fichier produit par le Sprint.
+
+        Upload MLflow opt-in via env var SPRINT_MLFLOW_UPLOAD_ARTIFACTS=1.
+        Désactivé par défaut : les dumps lourds (>10 GB) bloquaient le sprint
+        sur l'upload via tunnel SSH inverse. Les artefacts restent référencés
+        dans summary.json et sur disque côté pod.
+        """
         self._result.artifacts[str(path)] = description
         self.logger.info("[artifact] %s : %s", path, description)
-        if self._mlflow_run is not None:
+        if self._mlflow_run is not None and os.environ.get("SPRINT_MLFLOW_UPLOAD_ARTIFACTS") == "1":
             try:
                 import mlflow  # noqa: PLC0415
                 mlflow.log_artifact(str(path))
