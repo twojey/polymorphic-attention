@@ -1,5 +1,14 @@
 # ROADMAP — projet ASP
 
+> **⚠️ PIVOT STRATÉGIQUE 2026-05-12** — Priorité projet inversée.
+>
+> **Avant** : ASP (Partie 2 — validation polymorphique) prioritaire, catalogue (Partie 1) moyen.
+> **Maintenant** : **Catalogue exhaustif DOC/00b (131 propriétés × cross-Oracle SMNIST→LL) PRIORITAIRE**. ASP itérations = ablations secondaires conditionnées.
+>
+> Motivation : phase 3 v1+v2+v3 NO-GO (val_acc ≤ 0.20 vs Oracle 0.65), catalogue testé à ~2% seulement. Avant de conclure "ASP impossible", il faut un verdict scientifique propre sur la structure mathématique réelle de l'attention dense. Le catalogue complet est publiable indépendamment (livrable Partie 1 "Mathematical Signatures of Attention").
+>
+> Plan révisé : §3.9 (Sprints A-G, ~3-4 mois) cf. carnet 2026-05-12. Pod RunPod RTX 5090 fermable, re-extract si besoin (30 min + $0.30).
+
 ## Contexte de reprise (lire en premier)
 
 **État courant (2026-05-10 19:35 CEST)** : Sprint 1 en cours d'exécution sur VPS.

@@ -40,6 +40,46 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 ~11:00 UTC — Pivot stratégique : Partie 1 (catalogue) prioritaire
+
+**#decision #milestone #pivot** Après NO-GO phase 3 v1+v2+v3 (val_acc 0.11 → 0.20 vs Oracle 0.65), l'utilisateur décide de **réorienter le projet** :
+
+**Avant** : ASP sub-quadratique (Partie 2) = finalité ; catalogue mathématique (Partie 1) = moyen.
+**Maintenant** : **Catalogue exhaustif (Partie 1) = finalité prioritaire** ; ASP itérations = ablations secondaires.
+
+**Justification scientifique** :
+
+1. **Catalogue mesuré à 2 % seulement** (3/131 propriétés DOC/00b). Conclure "ASP impossible" sur ce sous-catalogue est non-rigoureux.
+2. **Le catalogue exhaustif est publiable indépendamment** (livrable Partie 1 DOC/00b §I, "réutilisable par toute la communauté")
+3. **Cross-Oracle SMNIST → LL** donne une matrice de comparaison inégalée — informe TOUTE architecture sub-quadratique future (Mamba, S4, Linformer, Reformer, Hyena, etc.), pas que ASP
+4. **Évite le piège "6 mois ASP poubelle si NO-GO"**. Avec catalogue solide, ASP NO-GO devient un résultat positif "voici ce que l'attention dense fait que ASP ne capture pas"
+
+**Plan révisé** (cf. ROADMAP §3.9 enrichi) :
+
+| Sprint | Objectif | Durée |
+|---|---|---|
+| **A1** Famille B complète (Cauchy, Vandermonde, Block-diag, Banded, Tropical, Sylvester) | 1-2 sem |
+| **A2** Familles O (rang déplacement) + P (Ho-Kalman) | 1-2 sem |
+| **A3** Familles L (fréquentielles) + U (sparse-structurées Butterfly/Monarch/etc.) | 1-2 sem |
+| **A4** Familles Q (hiérarchiques) + S (tenseurs) + G (algébriques) | 1-2 sem |
+| **A5** Familles C + R + T (stats par token, RKHS, équivariances) | 1-2 sem |
+| **B** Re-extract SMNIST dumps si non préservés | 0.5 jour |
+| **C** Phase 2 V2 SMNIST exhaustif (60+ projecteurs) | 1 jour compute + 1 sem analyse |
+| **D** Entraînement Oracle LL (TinyStories ou Wikipedia) | 3-5 jours + ~$50 |
+| **E** Phase 1+2 LL exhaustif | 1 sem |
+| **F** Cross-Oracle analysis (matrice SMNIST vs LL, classes universelles vs domain-spécifiques) | 1 sem |
+| **G** Rédaction Partie 1 (paper "Mathematical Signatures of Attention") | 2-3 sem |
+
+**Total estimé : 3-4 mois wall-clock**. Coût compute total : ~$5-50 (selon LL training).
+
+**Conséquences immédiates** :
+- Pod RunPod RTX 5090 **peut être fermé** (re-extract SMNIST en 30 min + $0.30 quand on reviendra)
+- ASP iterations (Toeplitz backbone, smart init, multi-head, etc.) deviennent **ablations optionnelles** une fois catalogue complet
+- Verdict ASP devient résultat secondaire du paper Partie 1
+- L'**objet scientifique du projet** est désormais la **batterie de tests cross-Oracle**, pas l'ASPLayer en soi
+
+**Mémoire mise à jour** : [project_strategic_pivot.md](memory MEMORY) noté pour persistence sessions futures.
+
 ### 2026-05-12 ~09:45 UTC — Phase 3 v1/v2 NO-GO + bug architectural ΔAttn
 
 **#milestone #phase3 #verdict** Phase 3 (ASPLayer training) v1 et v2 terminées sur pod RTX 5090, **verdict identique NO-GO net** :
