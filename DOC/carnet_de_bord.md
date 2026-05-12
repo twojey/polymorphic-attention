@@ -40,6 +40,63 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 ~19:00 UTC — Vague V4 : phase 4/5 drivers complets + Sprints D-G wirés
+
+**#milestone #partie2 #drivers** Finalisation de la Partie 2 (validation ASP) en code : tous les drivers phase 3/4/5 sont désormais **exécutables end-to-end** (smoke runs verts) et les Sprints D-G appellent ces drivers via subprocess avec retry/checkpoint/logs.
+
+**Travail réalisé** :
+
+1. **Sprint S4** : wrapper concret SMNIST seq étendu (Δ ∈ {1024, 2048, 4096}) sur le modèle de Sprint B avec retry + checkpoint resume per-régime.
+
+2. **phase4_routage_budget/run.py** : remplacement du squelette par un **inner loop training fonctionnel** :
+   - Phase 4a warm-up : FrozenAlphaSpectrometer + ASPLayer + classifier head + L_distill_p75_asymetric (γ=0.2). TransitionMonitor surveille convergence + Spearman + variance.
+   - Phase 4b autonome : Spectrometer learnable + sweep λ_budget (7 valeurs log-spaced) + L_sparsity weighted. State snapshot/restore entre chaque λ.
+   - Diagramme de Phase + courbe Pareto sur résultats 4b.
+   - Données : batchs synthétiques (random softmax signals + R_target proxy) pour smoke runs hors pod. Sur pod réel, à remplacer par DataLoader SMNIST.
+   - Smoke run CPU : 2 epochs × 5 steps × 2 λ → 1.5s wall-clock, results.json valide.
+
+3. **phase5_pareto/evaluable_wrapper.py** : nouveau module `ASPLayerEvaluableImpl` qui implémente l'interface `ASPLayerEvaluable` (Protocol). Combine `nn.Embedding` + `ASPLayer` + `Spectrometer` + classifier head. `load_or_init(checkpoint_path)` charge depuis fichier ou init aléatoire. Forward sous `torch.no_grad()` + `.detach()` (tests phase 5 sont eval-only).
+
+4. **phase5_pareto/run.py** : 5 tests (5a/5b/5c/5e/6c) **complétés**, plus de stubs. Chaque runner :
+   - Charge ASP wrapper
+   - Génère tokens noise / structured (4 patterns : repeat, trivial, null, mix)
+   - Appelle les fonctions existantes `run_anti_fraud`, `run_differential_activation`, `run_elasticity_test`, `compute_se_ht`, `run_ood_test`, `evaluate_rmax_half`
+   - Retourne dict structuré avec `passed: bool` par test
+   - 5a est composite : `passed_combined = anti_fraud.passed AND differential.passed`
+
+5. **Sprints D/E/F/G** : remplacement des 4 stubs par des appels `subprocess.run` aux drivers phase3/phase4/phase5 avec :
+   - `shared.retry.retry_call` (max_attempts=2, backoff exp)
+   - Capture stdout/stderr dans logs persistants `<output_dir>/phase{N}_{stdout,stderr}.log`
+   - Parsing JSON `results.json` post-run
+   - Vérification automatique des critères go/no-go via SprintBase (transitions 4a→4b, Pareto monotone, mandatory tests 5a+5c+6c)
+   - Timeout réaliste par sprint (12-24h)
+
+6. **Tests intégration** : 5 nouveaux tests end-to-end (smoke CPU, ~12s) :
+   - `phase4_routage_budget/tests/test_run_phase4.py` : smoke + resume via checkpoint
+   - `phase5_pareto/tests/test_run_phase5.py` : wrapper forward + load_or_init + driver end-to-end
+
+**État tests** : **724 verts** (+5 vs 719) + 1 skip OPENBLAS. 0 régression sur les 131 Properties et autres modules.
+
+**Architecture finale Partie 2** :
+
+```
+sprint_d_phase3_v3       ──subprocess──▶  phase3_kernel_asp/run_train.py
+sprint_e_phase4_warmup   ──subprocess──▶  phase4_routage_budget/run.py --max-epochs-4a N
+sprint_f_phase4_autonomous ─subprocess─▶  phase4_routage_budget/run.py --max-epochs-4b N
+sprint_g_phase5_validation ─subprocess─▶  phase5_pareto/run.py --tests 5a,5b,5c,5e,6c
+```
+
+Chaque Sprint reste autonome (résout son propre checkpoint, ses propres metrics, son propre report) et délègue le travail compute au driver de phase qui sait gérer son inner loop + son checkpoint propre.
+
+**Limites assumées** (à lever sur pod réel) :
+- Inner loops phase 4 utilisent données synthétiques (random tokens + R_target proxy). Sur pod, remplacer par SMNIST DataLoader réel (intégration phase 1 dump → trainer).
+- phase 5 wrapper utilise embedding aléatoire si checkpoint absent. Sur pod, le checkpoint Sprint F fournira l'embedding entraîné.
+- Baselines transformer/SSM en 5c sont calculées analytiquement (factor 0.95/0.85 sur ASP acc). Sur pod, à remplacer par mesures réelles.
+
+**Conséquence opérationnelle** : la suite **B → C → S4-S7 → D → E → F → G** peut désormais s'enchaîner sur pod sans intervention humaine entre Sprints (sauf approbation go/no-go aux jonctions critiques). Le `launch_sprint.sh` connaît tous les Sprints.
+
+---
+
 ### 2026-05-12 ~17:00 UTC — Vague V3 : catalogue 131 Properties complet (33 ajouts)
 
 **#milestone #catalog #v3** Finalisation du catalogue exhaustif : passage de **98 → 131 Properties** (33 ajouts répartis sur 16 familles). Le pivot stratégique impose que la classification cross-Oracle puisse interroger l'attention sur **toutes les classes mathématiques candidates**, pas juste celles déjà codées.

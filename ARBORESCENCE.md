@@ -389,7 +389,7 @@ Les trois dossiers `CODE/`, `DOC/`, `OPS/` sont **figés** au niveau racine :
 | **Phase 3** | 🔄 Squelette | Sprint D = backbone informé Sprint C |
 | **Phase 4** | 🔄 Squelette | Sprints E + F |
 | **Phase 5** | 🔄 Squelette | Sprint G |
-| **Tests** | ✅ **719 verts** | + 1 skip OPENBLAS |
+| **Tests** | ✅ **724 verts** | + 1 skip OPENBLAS |
 | **Doc** | ✅ Tous templates | + 2 outlines paper |
 | **Robustesse** | ✅ retry + logs + manifest | Pré-pod ready |
 

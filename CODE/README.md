@@ -48,7 +48,7 @@ Chaque sous-dossier contient un README qui décrit l'attendu de la phase et les 
 ## Conventions
 
 - **Stack** : PyTorch ≥ 2.11+cu128, Lightning Fabric, Hydra, uv. Voir `OPS/env/STACK.md`.
-- **Tests** : `pytest CODE/`, **719 verts** + 1 skip OPENBLAS (catalog 131 props complet)
+- **Tests** : `pytest CODE/`, **724 verts** + 1 skip OPENBLAS (catalog 131 + phase4/5 drivers)
 - **Logging** : `shared.logging_helpers.setup_logging` + MLflow self-hosted optionnel
 - **Checkpoint** : `shared.checkpoint.Checkpoint` atomic save+resume avec fingerprint
 - **Retry** : `shared.retry.retry` / `retry_call` (backoff exp + jitter)

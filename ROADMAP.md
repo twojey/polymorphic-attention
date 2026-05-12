@@ -17,14 +17,14 @@
 | **Battery** | ✅ + parallèle | `n_workers > 1` ThreadPoolExecutor |
 | **Projectors** | ✅ 8 | Toeplitz, Hankel, Cauchy, Banded, Block-diag, Butterfly, Monarch, Pixelfly |
 | **Fast solvers** | ✅ 3 | Levinson-Durbin, Cauchy, Sylvester displacement |
-| **Sprint runners** | ✅ 10 | B, C, D, E, F, G, S4-S7 (squelettes structurés) |
+| **Sprint runners** | ✅ 10 | B, C, **D, E, F, G** (wirés via subprocess), S4-S7 |
 | **Livrables génération** | ✅ 6 | cross-Oracle, predictions, signatures, verdict ASP, figures, run_all |
 | **Robustesse** | ✅ | retry helper, logs UTC horodatés, manifest reproductible |
 | **Phase 1** | ✅ Oracle entraîné | `oracle_e2f0b5e.ckpt` |
 | **Phase 1.5** | ✅ Calibré | 3 signaux validés |
-| **Phase 2-5** | 🔄 Squelettes | Code complet, run = Sprint B-G sur pod |
+| **Phase 2-5** | ✅ **Drivers complets** | phase4 inner loops + phase5 5 tests implémentés |
 | **Paper outlines** | ✅ 2 | Partie 1 + Partie 2 |
-| **Tests** | ✅ **719 verts** | + 1 skip OPENBLAS |
+| **Tests** | ✅ **724 verts** | + 1 skip OPENBLAS |
 
 ---
 
