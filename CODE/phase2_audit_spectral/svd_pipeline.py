@@ -103,15 +103,41 @@ def svd_attention(
     # CPU FP64 garde svdvals (rapide, pas de problème de convergence).
     use_eigvalsh = (target_device != "cpu")
     if use_eigvalsh:
-        eps = 1e-12 if target_dtype == torch.float64 else 1e-7
+        eps_base = 1e-12 if target_dtype == torch.float64 else 1e-7
         AAt = A_work @ A_work.transpose(-2, -1)
         eye = torch.eye(AAt.size(-1), dtype=target_dtype, device=target_device)
-        AAt = AAt + eps * eye
-        eigvals = torch.linalg.eigvalsh(AAt)
-        # eigvalsh retourne ordre ascendant → flip puis sqrt(clamp) pour s.
-        # On retire la ridge avant clamp pour rester fidèle aux vraies σ.
-        s2 = (eigvals.flip(-1) - eps).clamp_min(0)
-        s = s2.sqrt()
+
+        # Retry escalation : ridge ε de plus en plus gros si eigvalsh échoue
+        # (matrices ill-conditioned / eigenvalues répétés sur attention
+        # softmax très rank-deficient pour grands N — cf. seq=1287).
+        eigvals = None
+        for eps_factor in (1, 1000, 1_000_000):
+            eps = eps_base * eps_factor
+            try:
+                eigvals = torch.linalg.eigvalsh(AAt + eps * eye)
+                if eps_factor > 1:
+                    print(
+                        f"[svd_pipeline] eigvalsh GPU shape={tuple(AAt.shape)} : "
+                        f"succès avec ridge ε={eps:.1e} (factor={eps_factor})",
+                        file=sys.stderr, flush=True,
+                    )
+                break
+            except torch._C._LinAlgError as exc:
+                if eps_factor == 1_000_000:
+                    # Dernier recours : svdvals direct (peut fallback interne).
+                    print(
+                        f"[svd_pipeline] eigvalsh GPU a épuisé les ridges sur "
+                        f"shape={tuple(AAt.shape)} : {exc}. Fallback svdvals.",
+                        file=sys.stderr, flush=True,
+                    )
+                    s = torch.linalg.svdvals(A_work)
+                    eigvals = None  # sentinel : on a déjà s
+                    break
+        if eigvals is not None:
+            # eigvalsh retourne ordre ascendant → flip puis sqrt(clamp) pour s.
+            # On retire la ridge avant clamp pour rester fidèle aux vraies σ.
+            s2 = (eigvals.flip(-1) - eps).clamp_min(0)
+            s = s2.sqrt()
     else:
         try:
             s = torch.linalg.svdvals(A_work)
