@@ -54,6 +54,7 @@ from phase2_audit_spectral.batteries import (
 )
 from phase2_audit_spectral.batteries.battery_a import fit_additive_composition, fit_class_with_residual
 from phase2_audit_spectral.batteries.battery_d import battery_d_analysis
+from phase2_audit_spectral.checkpoint import Phase2State
 from phase2_audit_spectral.head_specialization import diagnose_heads, top_specialized_heads
 from phase2_audit_spectral.signal_decoupling import (
     diagnose_s_spectral_decoupling,
@@ -252,6 +253,30 @@ def main(cfg: DictConfig) -> None:
     svd_precision = str(OmegaConf.select(cfg, "svd.precision") or "fp64")
     print(f"[svd] device={svd_device} precision={svd_precision}", flush=True)
 
+    # Checkpoint dir : par défaut adjacent au dump_dir pour persistance pod
+    default_state_dir = (
+        Path(OmegaConf.select(cfg, "attention_dump_dir") or "/tmp")
+        / "_phase2_state"
+    )
+    state_dir = Path(OmegaConf.select(cfg, "checkpoint.dir") or default_state_dir)
+    resume_enabled = bool(OmegaConf.select(cfg, "checkpoint.enabled") or True)
+    state, is_resumed = Phase2State.create_or_resume(
+        state_dir,
+        seq_lens=seq_lens, n_examples_total=B,
+        svd_device=svd_device, svd_precision=svd_precision,
+    )
+    if not resume_enabled:
+        state.clean()
+        state, is_resumed = Phase2State.create_or_resume(
+            state_dir, seq_lens=seq_lens, n_examples_total=B,
+            svd_device=svd_device, svd_precision=svd_precision,
+        )
+    print(
+        f"[checkpoint] state_dir={state_dir} resume={is_resumed} "
+        f"existing={[p.stem for p in state_dir.glob('*.pt')]}",
+        flush=True,
+    )
+
     t0 = time.perf_counter()
     with start_run(
         experiment="phase2",
@@ -279,31 +304,38 @@ def main(cfg: DictConfig) -> None:
 
         # --- 2. SVD batchée (bucket par bucket pour respecter N variable) ---
         # r_eff_per_layer_head_example : (L, B, H) avec B = total exemples.
-        r_eff_per_layer_head_example = np.zeros((L, B, H), dtype=np.int64)
         theta_pct = int(cfg.theta * 100)
-        b_offset = 0
-        for dump_idx, d in enumerate(dumps):
-            B_d = d["attn"][0].size(0)
-            t_bucket = time.perf_counter()
-            for ell, A in enumerate(d["attn"]):
-                svd_out = svd_attention(
-                    A,
-                    theta_values=(0.95, 0.99),
-                    device=svd_device,  # type: ignore[arg-type]
-                    precision=svd_precision,  # type: ignore[arg-type]
+        if state.has("svd_r_eff"):
+            print("[checkpoint] SKIP SVD (r_eff déjà calculé)", flush=True)
+            r_eff_per_layer_head_example = state.load("svd_r_eff")
+        else:
+            r_eff_per_layer_head_example = np.zeros((L, B, H), dtype=np.int64)
+            b_offset = 0
+            for dump_idx, d in enumerate(dumps):
+                B_d = d["attn"][0].size(0)
+                t_bucket = time.perf_counter()
+                for ell, A in enumerate(d["attn"]):
+                    svd_out = svd_attention(
+                        A,
+                        theta_values=(0.95, 0.99),
+                        device=svd_device,  # type: ignore[arg-type]
+                        precision=svd_precision,  # type: ignore[arg-type]
+                    )
+                    r_eff_per_layer_head_example[ell, b_offset:b_offset + B_d] = (
+                        svd_out[f"r_eff_{theta_pct}"].cpu().numpy()
+                    )
+                elapsed = time.perf_counter() - t_bucket
+                print(
+                    f"  [svd] dump {dump_idx+1}/{len(dumps)} seq_len={seq_lens[dump_idx]} "
+                    f"B={B_d} : {elapsed:.1f}s",
+                    flush=True,
                 )
-                r_eff_per_layer_head_example[ell, b_offset:b_offset + B_d] = (
-                    svd_out[f"r_eff_{theta_pct}"].cpu().numpy()
-                )
-            elapsed = time.perf_counter() - t_bucket
-            print(
-                f"  [svd] dump {dump_idx+1}/{len(dumps)} seq_len={seq_lens[dump_idx]} "
-                f"B={B_d} : {elapsed:.1f}s",
-                flush=True,
-            )
-            b_offset += B_d
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+                b_offset += B_d
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            # Save checkpoint après SVD batchée complète (l'étape la plus coûteuse).
+            state.save("svd_r_eff", r_eff_per_layer_head_example)
+            print(f"[checkpoint] SVD r_eff saved → {state_dir}/svd_r_eff.pt", flush=True)
 
         # On agrège sur (L, H) pour Stress-Rank Map (un r_eff médian par exemple)
         r_eff_flat = r_eff_per_layer_head_example.astype(np.float64).mean(axis=(0, 2))  # (B,)
@@ -372,63 +404,85 @@ def main(cfg: DictConfig) -> None:
 
         # --- 6/7. Batteries A + B (par régime, échantillonné) ---
         # Pour réduire le coût, un seul exemple par régime (ω, Δ) × couche.
-        # En multi-bucket on itère sur tous les dumps : un même régime n'existe
-        # que dans un seul bucket (les seq_len sont disjoints par construction).
-        A_per_regime: dict[tuple, torch.Tensor] = {}
-        for d in dumps:
-            B_d = d["attn"][0].size(0)
-            od = d["omegas"]
-            dd = d["deltas"]
-            for ell in range(L):
-                for b in range(min(B_d, cfg.batteries.max_examples_per_layer)):
-                    key = (ell, int(od[b]), int(dd[b]))
-                    if key in A_per_regime:
-                        continue
-                    # moyenne sur les têtes : (H, N, N) → (N, N)
-                    A_per_regime[key] = d["attn"][ell][b].mean(dim=0)
-        print(f"[batteries] {len(A_per_regime)} régimes (couche × ω × Δ)", flush=True)
+        if state.has("batteries_results"):
+            print("[checkpoint] SKIP batteries A/B/D (déjà calculé)", flush=True)
+            cached = state.load("batteries_results")
+            battery_a_results = cached["battery_a_results"]
+            epsilon_per_regime = cached["epsilon_per_regime"]
+            battery_b_results = cached["battery_b_results"]
+            battery_d = cached["battery_d"]
+            n_orphans = len(battery_d.orphan_regimes)
+            n_regimes_total = cached["n_regimes_total"]
+        else:
+            A_per_regime: dict[tuple, torch.Tensor] = {}
+            for d in dumps:
+                B_d = d["attn"][0].size(0)
+                od = d["omegas"]
+                dd = d["deltas"]
+                for ell in range(L):
+                    for b in range(min(B_d, cfg.batteries.max_examples_per_layer)):
+                        key = (ell, int(od[b]), int(dd[b]))
+                        if key in A_per_regime:
+                            continue
+                        # moyenne sur les têtes : (H, N, N) → (N, N)
+                        A_per_regime[key] = d["attn"][ell][b].mean(dim=0)
+            print(f"[batteries] {len(A_per_regime)} régimes (couche × ω × Δ)", flush=True)
 
-        battery_a_results = fit_classes_per_regime(A_per_regime)
-        epsilon_per_regime = {k: r.epsilon for k, r in battery_a_results.items()}
-        for regime, result in list(battery_a_results.items())[: cfg.batteries.log_top_n]:
-            _safe_mlflow(
-                f"log_metric epsilon_best regime={regime}",
-                mlflow.log_metric,
-                f"epsilon_best_layer{regime[0]}_omega{regime[1]}_delta{regime[2]}",
-                result.epsilon_best,
+            battery_a_results = fit_classes_per_regime(A_per_regime)
+            epsilon_per_regime = {k: r.epsilon for k, r in battery_a_results.items()}
+            for regime, result in list(battery_a_results.items())[: cfg.batteries.log_top_n]:
+                _safe_mlflow(
+                    f"log_metric epsilon_best regime={regime}",
+                    mlflow.log_metric,
+                    f"epsilon_best_layer{regime[0]}_omega{regime[1]}_delta{regime[2]}",
+                    result.epsilon_best,
+                )
+
+            battery_b_residuals = {}
+            battery_b_results = []
+            for regime, A in A_per_regime.items():
+                best_class = battery_a_results[regime].class_best
+                _, residual = fit_class_with_residual(A, best_class)
+                battery_b_residuals[regime] = residual
+                battery_b_results.append(residual_analysis(residual))
+
+            # --- 8. Batterie D ---
+            additive_eps: dict[tuple, float] = {}
+            for regime, A in A_per_regime.items():
+                eps, _, _ = fit_additive_composition(A, class1="toeplitz", class2="hankel")
+                additive_eps[regime] = eps
+            battery_d = battery_d_analysis(
+                epsilon_per_regime=epsilon_per_regime,
+                A_per_regime=A_per_regime,
+                additive_epsilon=additive_eps,
+                orphan_threshold=cfg.batteries.orphan_threshold,
+                asymmetry_threshold=cfg.batteries.asymmetry_threshold,
             )
+            n_orphans = len(battery_d.orphan_regimes)
+            n_regimes_total = len(A_per_regime)
+            # Save checkpoint (sans A_per_regime qui peut être très gros)
+            state.save("batteries_results", {
+                "battery_a_results": battery_a_results,
+                "epsilon_per_regime": epsilon_per_regime,
+                "battery_b_results": battery_b_results,
+                "battery_d": battery_d,
+                "n_regimes_total": n_regimes_total,
+            })
+            print(f"[checkpoint] batteries saved → {state_dir}/batteries_results.pt", flush=True)
+            del A_per_regime  # libère la mémoire
 
-        battery_b_residuals = {}
-        battery_b_results = []
-        for regime, A in A_per_regime.items():
-            best_class = battery_a_results[regime].class_best
-            _, residual = fit_class_with_residual(A, best_class)
-            battery_b_residuals[regime] = residual
-            battery_b_results.append(residual_analysis(residual))
-
-        # --- 8. Batterie D ---
-        additive_eps: dict[tuple, float] = {}
-        for regime, A in A_per_regime.items():
-            eps, _, _ = fit_additive_composition(A, class1="toeplitz", class2="hankel")
-            additive_eps[regime] = eps
-        battery_d = battery_d_analysis(
-            epsilon_per_regime=epsilon_per_regime,
-            A_per_regime=A_per_regime,
-            additive_epsilon=additive_eps,
-            orphan_threshold=cfg.batteries.orphan_threshold,
-            asymmetry_threshold=cfg.batteries.asymmetry_threshold,
-        )
-        mlflow.log_metric("n_orphan_regimes", len(battery_d.orphan_regimes))
-        mlflow.log_metric(
-            "orphan_ratio",
-            len(battery_d.orphan_regimes) / max(len(A_per_regime), 1),
-        )
+        mlflow.log_metric("n_orphan_regimes", n_orphans)
+        mlflow.log_metric("orphan_ratio", n_orphans / max(n_regimes_total, 1))
 
         # --- 9. Diagnostic découplage S_Spectral ↔ r_eff (garde-fou H2) ---
         # Pré-requis : OPENBLAS_NUM_THREADS=1 (vérifié dans compute_s_spectral)
         decoupling_enabled = bool(OmegaConf.select(cfg, "decoupling.enabled") or True)
         decoupling_diag = None
-        if decoupling_enabled:
+        if state.has("decoupling_diag"):
+            print("[checkpoint] SKIP diagnostic découplage (déjà calculé)", flush=True)
+            decoupling_diag = state.load("decoupling_diag")
+            log_diagnostic_to_mlflow(decoupling_diag, mlflow_module=mlflow)
+        elif decoupling_enabled:
             print("\n[decoupling] Diagnostic S_Spectral vs r_eff (sous-échantillonné)…", flush=True)
             _print_resource_snapshot("[decoupling pre]")
             try:
@@ -447,6 +501,8 @@ def main(cfg: DictConfig) -> None:
                     max_seq_len=(int(_max_seq) if _max_seq is not None else None),
                 )
                 log_diagnostic_to_mlflow(decoupling_diag, mlflow_module=mlflow)
+                state.save("decoupling_diag", decoupling_diag)
+                print(f"[checkpoint] diagnostic découplage saved → {state_dir}/decoupling_diag.pt", flush=True)
                 rho = decoupling_diag.rho_global
                 print(
                     f"[decoupling] ρ_global = {rho.rho:+.3f} "
@@ -469,7 +525,7 @@ def main(cfg: DictConfig) -> None:
         # - SCH corroborée (fit transfer law R² > min_r2 OU IQR petite par régime)
         # - portion d'orphelins faible
         # - signal S_Spectral non découplé du vrai r_eff (si diagnostic activé)
-        orphan_ratio = len(battery_d.orphan_regimes) / max(len(A_per_regime), 1)
+        orphan_ratio = n_orphans / max(n_regimes_total, 1)
         passed_orphans = orphan_ratio < cfg.go_no_go.max_orphan_ratio
         passed_decoupling = (
             decoupling_diag is None
@@ -501,7 +557,6 @@ def main(cfg: DictConfig) -> None:
             )
 
         # Libération mémoire avant retour (utile si chained in nohup)
-        del A_per_regime
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

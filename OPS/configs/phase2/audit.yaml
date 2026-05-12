@@ -20,6 +20,15 @@ dumps_glob: "audit_dump_seq*.pt"
 # --- SVD ---
 theta: 0.99    # r_eff(θ) cible. ε_target sur A pré-enregistré.
 
+# --- Checkpoint / resume (DOC/feedback_script_robustness, ajouté 2026-05-12) ---
+# Sauvegarde après chaque étape majeure (SVD batchée, batteries, diagnostic
+# découplage). Relance saute les étapes déjà calculées si le fingerprint
+# (seq_lens, n_examples, svd_device/precision) matche.
+checkpoint:
+  enabled: true
+  # dir : null → automatique <attention_dump_dir>/_phase2_state/
+  dir: null
+
 # --- Backend SVD (DOC/carnet 2026-05-12) ---
 # CPU FP64 = spec stricte DOC/01 §8.4. GPU FP32 = bypass pour consumer
 # Blackwell (RTX 5090, FP64 ≈ 1/64). r_eff(θ) ne dépend que de l'ordre des
