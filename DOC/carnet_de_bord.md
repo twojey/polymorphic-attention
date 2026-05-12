@@ -40,6 +40,59 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 ~09:45 UTC — Phase 3 v1/v2 NO-GO + bug architectural ΔAttn
+
+**#milestone #phase3 #verdict** Phase 3 (ASPLayer training) v1 et v2 terminées sur pod RTX 5090, **verdict identique NO-GO net** :
+
+```
+=== Phase 3 verdict : NO-GO | best_val_acc=0.1107 (oracle=0.6450) ===
+saturation=False (asp=0.070, oracle=0.645)
+effondrement=True
+monotonie=True
+lissité=True
+```
+
+**Interprétation simple** : l'ASPTransformer V1 **n'apprend pas du tout** SMNIST. val_acc = 0.11 ≈ 1/n_classes = aléatoire. Loss task plafonne à 2.30 = log(10) = entropie max. 3/4 sanity checks passent (la structure Matriochka est mathématiquement saine) mais la saturation échoue : **même à R_max=32 plein rang, l'ASP ne s'approche pas d'Oracle**.
+
+**Diagnostic architectural** (descendu après inspection code vs spec) :
+
+La spec DOC/03 §3 décrit :
+```
+y_t = Backbone(x_t) + Σ_{i=1..r} m_{t,i} · u_i v_iᵀ · x_t
+```
+
+C'est une **projection linéaire indépendante par token**. Avec Backbone = Identity (choisi parce que catalogue phase 2 V1 rejeté), on obtient `(I + UVᵀ) · x_t` token par token. **Aucune interaction token↔token**.
+
+Or SMNIST = tâche compositionnelle distante : le QUERY token doit "lire" le résultat de ω opérations à travers Δ tokens noise. Sans mécanisme attention QKᵀ ou conv mixing, impossible.
+
+**Métaphore** : résumer un livre en regardant chaque mot séparément sans jamais en comparer deux. C'est ce que faisait l'ASPLayer V1.
+
+**Action V2 (commit `44d5b1b`)** : ajout du mode `delta_attn_mode='attention'`. Au lieu de `UVᵀ·x` projection fixe, on calcule :
+```
+Q = x · U[:, :r]   K = x · V[:, :r]
+scores = Q Kᵀ / √r_eff
+ΔAttn = softmax(scores) · x
+```
+
+C'est une **vraie attention low-rank** où U et V deviennent des projections key/query (rank-r vs d_model). Le softmax fait le token-mixing manquant. Compatible Smart Init (les vecteurs singuliers de l'Oracle deviennent des Q/K projections naturelles).
+
+Phase 3 v3 en cours (lancée 11:45 Paris, ETA ~12:00). Si v3 val_acc s'approche d'Oracle → architecture corrigée. Sinon → problème plus profond (peut-être besoin d'un vrai Backbone qui mixe les tokens).
+
+**Conséquence pour la spec** : DOC/03 §3 a un bug latent. La transcription mathématique de "low-rank attention correction" donne une projection linéaire, pas une attention. À amender V2 spec post-validation phase 3 v3.
+
+**Stats du run v1/v2** :
+- 10 epochs sur init_phase3 split (~6900 steps), durée 1h cumul GPU RTX 5090 batch=8
+- Loss task plateau ~2.30 (= -log(0.1) = random)
+- Loss matriochka ~2.30 (parallèle à task)
+- Loss consistency → 0 (les sorties à rangs voisins convergent, mais sur du bruit)
+- Oracle val_acc = 0.645 (NB : Oracle moins bon que phase 1 attendu — set init_phase3 différent du train_oracle)
+
+**Tâches debt accumulées** :
+- Tester phase 3 v3 (`delta_attn_mode=attention`) — en cours
+- Si v3 OK : amender la spec DOC/03 §3 pour clarifier "attention low-rank" vs "projection low-rank"
+- Si v3 NO-GO : revoir Backbone (essayer Toeplitz/Hankel malgré ε=0.45) ou repenser architecture
+- Documenter ablation linear vs attention (le flag `delta_attn_mode` permet l'ablation directe)
+
 ### 2026-05-12 ~09:15 UTC — Phase 2 verdict + dette technique catalogue
 
 **#milestone #phase2 #verdict** Phase 2 audit spectral terminée sur pod RTX 5090 après ~3h de debug/run (5 versions v1-v8 dont 4 killed pour bugs). Verdict produit, rapport [DOC/reports/phase2.md](reports/phase2.md) instancié.
