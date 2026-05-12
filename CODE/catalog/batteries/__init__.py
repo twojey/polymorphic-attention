@@ -11,5 +11,20 @@ level_research (cf. ROADMAP §3.9).
 """
 
 from catalog.batteries.base import Battery, BatteryResults
+from catalog.batteries.levels import (
+    level_extended,
+    level_full,
+    level_minimal,
+    level_principal,
+    level_research,
+)
 
-__all__ = ["Battery", "BatteryResults"]
+__all__ = [
+    "Battery",
+    "BatteryResults",
+    "level_minimal",
+    "level_principal",
+    "level_extended",
+    "level_full",
+    "level_research",
+]

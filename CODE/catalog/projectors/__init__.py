@@ -10,13 +10,17 @@ Consommé par les Properties de family B (structurelles) du catalogue DOC/00b.
 """
 
 from catalog.projectors.base import Projector
+from catalog.projectors.banded import Banded
+from catalog.projectors.block_diagonal import BlockDiagonal
+from catalog.projectors.hankel import Hankel
 from catalog.projectors.identity import Identity
 from catalog.projectors.toeplitz import Toeplitz
-from catalog.projectors.hankel import Hankel
 
 __all__ = [
     "Projector",
+    "Banded",
+    "BlockDiagonal",
+    "Hankel",
     "Identity",
     "Toeplitz",
-    "Hankel",
 ]
