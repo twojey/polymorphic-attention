@@ -1,0 +1,24 @@
+# Catalog SMNIST × niveau principal — config référence.
+# Lance Battery principale sur tous les régimes SMNIST standard.
+
+defaults:
+  - base
+  - _self_
+
+level: principal
+
+oracle:
+  kind: smnist
+  checkpoint: OPS/checkpoints/oracle_e2f0b5e.ckpt
+  device: cpu
+
+battery:
+  n_examples_per_regime: 32
+  regime_cap: null
+
+mlflow:
+  enabled: true
+  sprint: 1
+  status: pre_registered
+
+output_dir: OPS/logs/catalog/smnist_principal

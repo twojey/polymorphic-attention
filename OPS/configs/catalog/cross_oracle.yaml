@@ -1,0 +1,42 @@
+# Catalog cross-oracle harness — lance Battery sur SMNIST + LL + Vision.
+# Sprint scientifique Partie 1. Cf. catalog.cross_oracle.
+
+defaults:
+  - base
+  - _self_
+
+level: principal
+
+# Liste des Oracles à comparer
+# (sera converti en JSON pour catalog.cross_oracle --oracles-spec)
+oracles:
+  - name: smnist
+    kind: smnist
+    checkpoint: OPS/checkpoints/oracle_e2f0b5e.ckpt
+  - name: synthetic_random
+    kind: synthetic
+    structure: random
+    seq_len: 16
+    seed: 42
+  - name: synthetic_low_rank
+    kind: synthetic
+    structure: low_rank
+    seq_len: 16
+    seed: 0
+  # - name: ll
+  #   kind: ll
+  #   checkpoint: OPS/checkpoints/ll_tinystories.ckpt  # Sprint S7
+  # - name: vision
+  #   kind: vision
+  #   checkpoint: OPS/checkpoints/vision_mnist.ckpt    # Sprint S5
+
+battery:
+  n_examples_per_regime: 16
+  regime_cap: 5   # 5 régimes max par Oracle pour pas exploser
+
+mlflow:
+  enabled: true
+  sprint: 2
+  status: exploratory
+
+output_dir: OPS/logs/catalog/cross_oracle

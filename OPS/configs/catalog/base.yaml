@@ -1,0 +1,45 @@
+# Base config catalog — values communs à tous les niveaux/oracles.
+# Sprint A1+. Spec : DOC/CATALOGUE.
+
+defaults:
+  - _self_
+
+# --- Niveau Battery par défaut ---
+level: principal   # minimal | principal | extended | full | research
+
+# --- Oracle par défaut ---
+oracle:
+  kind: synthetic   # synthetic | smnist | ll | vision | code
+  # Pour smnist : checkpoint requis
+  checkpoint: null
+  # Pour synthetic :
+  structure: random
+  seq_len: 16
+  n_layers: 2
+  n_heads: 4
+  seed: 0
+
+# --- Battery params ---
+battery:
+  n_examples_per_regime: 32
+  regime_cap: null   # null = pas de cap
+
+# --- Machine / device ---
+device: null   # null = auto-detect via MachineProfile
+fp64_extract: true
+
+# --- Output / checkpoint ---
+output_dir: OPS/logs/catalog
+checkpoint_enabled: true
+
+# --- MLflow ---
+mlflow:
+  enabled: true   # opt-in si MLFLOW_TRACKING_URI défini
+  sprint: 1
+  status: exploratory   # exploratory | pre_registered | invalidated
+
+# --- Robustesse (cf. feedback_script_robustness) ---
+robustness:
+  stderr_traceback: true
+  max_property_retries: 1
+  skip_on_crash: true

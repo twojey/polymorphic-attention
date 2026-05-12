@@ -1,0 +1,23 @@
+# Catalog SMNIST × niveau research — 60+ Properties sur tous régimes.
+# Coût estimé : ~30 min CPU pour 9 régimes × 32 examples sur SMNIST.
+
+defaults:
+  - base
+  - _self_
+
+level: research
+
+oracle:
+  kind: smnist
+  checkpoint: OPS/checkpoints/oracle_e2f0b5e.ckpt
+
+battery:
+  n_examples_per_regime: 32
+  regime_cap: null
+
+mlflow:
+  enabled: true
+  sprint: 1
+  status: exploratory
+
+output_dir: OPS/logs/catalog/smnist_research
