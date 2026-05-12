@@ -604,19 +604,36 @@ Spec : [DOC/03_phase_kernel_asp.md](DOC/03_phase_kernel_asp.md)
 - [x] Mode `delta_attn_mode='attention'` V2 (token-mixing low-rank) — `44d5b1b`
 - [ ] Heatmap R_target par distillation (baseline phase 4) — `forward_with_rank(R_max)` sur grille de stress + `shared.plotting.heatmap_2d`
 
-### 3.8 — 🚪 Go/no-go phase 3 — scénarios possibles
+### 3.8 — 🚪 Go/no-go phase 3 — verdict 2026-05-12
 
-Plusieurs verdicts possibles, anticipés pour cadrer la suite (cf. carnet 2026-05-12 §"Phase 3 NO-GO + bug architectural") :
+**Verdict atteint** : **NO-GO architecture ΔAttn** (cf. carnet 2026-05-12 §"Phase 3 v3 NO-GO confirmation").
 
-| Scénario | val_acc vs Oracle | Action |
+Résultats des 3 variantes testées :
+
+| Variante | Config | best_val_acc | Sanity | Verdict |
+|---|---|---|---|---|
+| **v1** | delta_attn_mode=linear, backbone=identity, R_max=32 | 0.111 (= random) | 3/4 (saturation fail) | NO-GO |
+| **v2** | idem v1 + sweep Δ restreint | 0.111 | 3/4 | NO-GO |
+| **v3** | delta_attn_mode=attention, backbone=identity, R_max=32 | **0.197** | 2/4 (saturation + monotonie fail) | NO-GO |
+
+Oracle baseline = 0.645 sur init_phase3 split.
+
+**Lecture** :
+- V3 attention améliore +9 pp vs V1 linear → token-mixing softmax(QKᵀ) apporte de l'info
+- Mais reste loin Oracle (30 % du gap traversé)
+- V3 casse la monotonie qualité vs r → softmax low-rank avec mask Matriochka instable
+
+**Scénarios anticipés (pour mémoire — cas non-réalisé)** :
+
+| Scénario | val_acc vs Oracle | Action si déclenché |
 |---|---|---|
-| **GO franc** | ≥ Oracle − 0.10, 4/4 sanity | Passage stage 4 (Spectromètre + routage budget) |
+| **GO franc** (non-atteint) | ≥ Oracle − 0.10, 4/4 sanity | Passage stage 4 (Spectromètre + routage budget) |
 | **GO conditionnel (smart init)** | atteint avec smart init seulement | GO mais ablation Xavier vs smart obligatoire en phase 5 |
 | **GO partiel (saturation faible)** | apprend mais < Oracle − 0.10 | Itérer R_max ou Backbone non-trivial avant stage 4 |
-| **NO-GO architecture ΔAttn** | val_acc ≈ random (V1 linear ET V2 attention échouent) | Repenser ΔAttn (Q/K séparés, multi-head, etc.) avant stage 4 |
+| **🔴 NO-GO architecture ΔAttn (RÉALISÉ)** | V1 + V2 échouent | → Sprint phase 2++ étendu (cf. §3.9) ; pivot stratégique acté |
 | **NO-GO Matriochka cassée** | lissité ou monotonie fail | Rééquilibrer λ_M / λ_C, sampling de rangs |
 | **NO-GO fondamental** | effondrement fail (sanity 2) | Bug structurel à fixer, bloquant |
-| **NO-GO total** | aucune variante ne marche après itérations | → Sprint phase 2++ étendu (cf. §3.9 ci-dessous) |
+| **NO-GO total** | aucune variante ne marche | Catalogue exhaustif (§3.9) puis re-tester |
 
 ### 3.9 — Plan de réorientation si NO-GO total
 

@@ -40,6 +40,64 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 — Synthèse de journée (récap pour reprise rapide)
+
+**TL;DR** : ASP phase 3 NO-GO ferme sur 3 variantes architecture. Pivot stratégique acté : le projet privilégie désormais le **catalogue exhaustif DOC/00b cross-Oracle (Partie 1)** sur l'itération ASP (Partie 2). Pod RTX 5090 fermé. Reprise sur Sprint A1 (famille B complète) dès prochaine session.
+
+**État scientifique** :
+- ✅ Phase 1 V2 : 9 dumps multi-bucket extraits sur pod (perdus avec pod, re-extract = 30 min + $0.30 si nécessaire)
+- ✅ Phase 2 V1 : verdict NO-GO sur sous-catalogue {Toeplitz, Hankel, Identity} = **3 propriétés sur 131 DOC/00b**. SCH au sens rang faible **VALIDÉE forte** (r_eff médian = 2). Résidu rank-1 (svd_top1_ratio=1.000) suggère structure outer product u·vᵀ.
+- ✅ Phase 3 testée 3 variantes :
+  - v1 (linear ΔAttn, identity backbone) : val_acc = 0.111 ≈ random (sanity 3/4)
+  - v2 (linear ΔAttn, sweep Δ restreint) : val_acc = 0.111 idem (sanity 3/4)
+  - v3 (attention ΔAttn, softmax(QKᵀ)·x) : val_acc = 0.197 (sanity **2/4** — monotonie cassée en plus)
+
+**État infra** :
+- ✅ Robustesse 4/4 atteinte : checkpoint resume, retry per-batch OOM, logs stderr+traceback+flush, no silent failures, caps configurables, MLflow opt-in
+- ✅ Phase 2 + phase 3 ont leur module `checkpoint.py` + state dir + atomic save
+- ✅ 6 bugs débloqués durant le run : oracle_checkpoint Hydra+, audit defaults composition, Hankel metrics slow, mlflow disk blowup, svdvals fallback lent, eigvalsh ridge escalation, bool(X or True) bug, ΔAttn linear vs attention
+
+**État docs** :
+- ✅ Rapport phase 2 instancié `DOC/reports/phase2.md` (catalogue testé 2 %)
+- ✅ Carnet H3 VALIDÉE, H4 REJETÉE-sur-sous-catalogue, H5 non concluant
+- ✅ ROADMAP §0 pivot, §3.8 7 scénarios, §3.9 plan Sprints A-G
+- ✅ Memory `project_strategic_pivot.md` créée
+
+**Prochaine session — Sprint A1** :
+- Famille B DOC/00b : Cauchy (avec poles appris), Vandermonde, Block-diagonal, Banded, Tropical, Sylvester (6 propriétés)
+- Pure dev VPS, pas de pod nécessaire
+- Wall-clock estimé 1-2 semaines
+
+### 2026-05-12 ~11:45 UTC — Phase 3 v3 (attention mode) NO-GO confirmation
+
+**#milestone #phase3 #verdict** Phase 3 v3 avec `delta_attn_mode='attention'` (commit `44d5b1b`) terminée. Verdict :
+
+```
+=== Phase 3 verdict : NO-GO | best_val_acc=0.1971 (oracle=0.6450) ===
+Epoch 10/10 : val_acc=0.1873
+saturation=False (asp=0.026, oracle=0.645)
+effondrement=True (diff=0.00e+00)
+monotonie=False  ← NOUVEAU FAIL vs v1/v2
+lissité=True (max_jump=0.019)
+```
+
+**Comparaison v1 vs v3** :
+
+| Métrique | v1 (linear) | v3 (attention) | Oracle | Lecture |
+|---|---|---|---|---|
+| best_val_acc | 0.111 | **0.197** | 0.645 | +9 pp avec attention mode |
+| Loss task plateau | 2.30 (= log 10) | 1.7-2.3 (varies) | — | Apprentissage partiel en v3 |
+| Sanity passed | 3/4 | **2/4** | — | Monotonie cassée en v3 |
+
+**Lecture** : V3 attention mode **améliore marginalement** (+9 pp val_acc, loss varie) — le token-mixing softmax(QK^T) apporte de l'information. **Mais reste très loin d'Oracle** (30 % du gap traversé seulement). **Monotonie qualité vs r maintenant cassée** — le softmax low-rank avec mask Matriochka introduit de l'instabilité par rang.
+
+**Diagnostic finalisé** :
+- L'ASPLayer V1 spec (ΔAttn = UVᵀ·x projection linéaire) **manque le mécanisme attention** → ne peut pas apprendre
+- L'ASPLayer V2 (ΔAttn = softmax(Q·Kᵀ)·x avec Q=x·U, K=x·V) **apprend marginalement** mais reste loin Oracle + casse monotonie
+- → Le **catalogue V1 phase 2 testé est trop restreint** pour informer le bon Backbone. Avec Identity backbone, ΔAttn seul ne peut pas reproduire l'attention dense efficacement.
+
+**Conséquence stratégique** : on bascule sur le pivot (cf. entrée 11:00 UTC) — catalogue exhaustif d'abord, ASP ablation secondaire après.
+
 ### 2026-05-12 ~11:00 UTC — Pivot stratégique : Partie 1 (catalogue) prioritaire
 
 **#decision #milestone #pivot** Après NO-GO phase 3 v1+v2+v3 (val_acc 0.11 → 0.20 vs Oracle 0.65), l'utilisateur décide de **réorienter le projet** :
