@@ -1,7 +1,7 @@
 """
 b4_sparse_fraction.py — Property B4 : sparsité effective.
 
-Spec : DOC/00b §B4 "ratio coefficients > seuil".
+Spec : DOC/CATALOGUE §B4 "ratio coefficients > seuil".
 
 Mesure plusieurs proxies de sparsité par matrice :
 - `sparse_fraction_eps_*` : ratio |A_ij| < ε × max|A| (entrées négligeables)

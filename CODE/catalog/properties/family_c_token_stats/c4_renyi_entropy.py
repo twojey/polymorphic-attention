@@ -1,7 +1,7 @@
 """
 c4_renyi_entropy.py — Property C4 : entropie de Rényi par ligne.
 
-Spec : DOC/00b §C4 "H_α = (1-α)⁻¹ log Σ p_i^α (α=2 typique)".
+Spec : DOC/CATALOGUE §C4 "H_α = (1-α)⁻¹ log Σ p_i^α (α=2 typique)".
 
 Famille paramétrée par α :
 - α → 1 : Shannon (limite)

@@ -1,41 +1,44 @@
 """
-checkpoint.py — sauvegarde/restore du training ASPTransformer phase 3.
+checkpoint.py — wrapper léger sur shared.checkpoint.Checkpoint pour phase 3.
 
-Cohérent avec feedback_script_robustness §2 (resume après crash obligatoire
-pour toute étape > 5 min). Pour phase 3, l'entraînement peut prendre des
-heures sur grand R_max — un crash en milieu d'epoch perdrait des minutes
-voire des heures.
+Maintenu pour backward compat. Le stockage est délégué à
+`shared.checkpoint.Checkpoint` ; les méthodes save_latest / save_best /
+load_latest construisent les dicts checkpoint adaptés au training
+ASPTransformer (model.state_dict + optimizer.state_dict + meta).
 
 État sauvé après chaque epoch :
 - model.state_dict()
 - optimizer.state_dict()
-- epoch courant + global step
+- epoch + global step
 - best_val_acc + oracle_acc baseline
 
-Format : `<output_dir>/_phase3_state/`
-- `fingerprint.pkl` : config critique (R_max, d_model, n_layers, backbone_class)
-- `latest.pt`       : checkpoint le plus récent (epoch fini)
-- `best.pt`         : checkpoint avec best val_acc à ce jour
-
-Atomic save via `torch.save(obj, tmp)` + `os.replace(tmp, target)`.
+Fingerprint : R_max, d_model, n_layers, backbone_class, init_strategy.
 """
 
 from __future__ import annotations
 
-import os
-import pickle
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import torch
 
+from shared.checkpoint import Checkpoint
+
 
 @dataclass
 class Phase3State:
-    """État reprenable de l'entraînement phase 3."""
-    state_dir: Path
-    fingerprint: dict[str, Any] = field(default_factory=dict)
+    """État reprenable de l'entraînement phase 3 (compose Checkpoint)."""
+
+    checkpoint: Checkpoint
+
+    @property
+    def state_dir(self) -> Path:
+        return self.checkpoint.state_dir
+
+    @property
+    def fingerprint(self) -> dict[str, Any]:
+        return self.checkpoint.fingerprint
 
     @classmethod
     def create_or_resume(
@@ -48,32 +51,15 @@ class Phase3State:
         backbone_class: str,
         init_strategy: str,
     ) -> tuple["Phase3State", bool]:
-        """Charge l'état si compatible, sinon en crée un.
-
-        Retourne (state, is_resumed). Si fingerprint diff → raise.
-        """
-        state_dir = Path(state_dir)
-        state_dir.mkdir(parents=True, exist_ok=True)
-        fp_path = state_dir / "fingerprint.pkl"
-        new_fp = {
+        fp: dict[str, Any] = {
             "R_max": R_max, "d_model": d_model, "n_layers": n_layers,
             "backbone_class": backbone_class, "init_strategy": init_strategy,
         }
-        if fp_path.exists():
-            with open(fp_path, "rb") as f:
-                old_fp = pickle.load(f)
-            if old_fp != new_fp:
-                raise RuntimeError(
-                    f"État phase 3 incompatible : {old_fp} != {new_fp}. "
-                    f"Supprimer {state_dir} pour repartir."
-                )
-            return cls(state_dir=state_dir, fingerprint=new_fp), True
-        with open(fp_path, "wb") as f:
-            pickle.dump(new_fp, f)
-        return cls(state_dir=state_dir, fingerprint=new_fp), False
+        cp, resumed = Checkpoint.create_or_resume(state_dir, fingerprint=fp)
+        return cls(checkpoint=cp), resumed
 
     def has_latest(self) -> bool:
-        return (self.state_dir / "latest.pt").is_file()
+        return self.checkpoint.has("latest")
 
     def save_latest(
         self,
@@ -85,16 +71,12 @@ class Phase3State:
         best_val_acc: float,
         oracle_acc: float,
     ) -> None:
-        ckpt = {
+        self.checkpoint.save("latest", {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "epoch": epoch, "step": step,
             "best_val_acc": best_val_acc, "oracle_acc": oracle_acc,
-        }
-        target = self.state_dir / "latest.pt"
-        tmp = self.state_dir / "latest.pt.tmp"
-        torch.save(ckpt, tmp)
-        os.replace(tmp, target)
+        })
 
     def save_best(
         self,
@@ -106,25 +88,17 @@ class Phase3State:
         val_acc: float,
         oracle_acc: float,
     ) -> None:
-        ckpt = {
+        self.checkpoint.save("best", {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "epoch": epoch, "step": step,
             "val_acc": val_acc, "oracle_acc": oracle_acc,
-        }
-        target = self.state_dir / "best.pt"
-        tmp = self.state_dir / "best.pt.tmp"
-        torch.save(ckpt, tmp)
-        os.replace(tmp, target)
+        })
 
     def load_latest(
         self, *, model: torch.nn.Module, optimizer: torch.optim.Optimizer,
     ) -> dict[str, Any]:
-        """Restaure model + optimizer en place. Retourne metadata (epoch, step, ...)."""
-        target = self.state_dir / "latest.pt"
-        if not target.is_file():
-            raise FileNotFoundError(f"Pas de latest.pt dans {self.state_dir}")
-        ckpt = torch.load(str(target), map_location="cpu", weights_only=False)
+        ckpt = self.checkpoint.load("latest")
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         return {
@@ -134,8 +108,4 @@ class Phase3State:
         }
 
     def clean(self) -> None:
-        for f in self.state_dir.glob("*.pt"):
-            f.unlink()
-        fp = self.state_dir / "fingerprint.pkl"
-        if fp.is_file():
-            fp.unlink()
+        self.checkpoint.clean()

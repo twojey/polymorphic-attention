@@ -3,7 +3,7 @@ base.py — interface AbstractOracle + structures de données AttentionDump et R
 
 Un Oracle fournit des matrices d'attention pour un domaine donné. Le seam
 Oracle permet la comparaison cross-domain (SMNIST × LL × vision) qui est
-le cœur de la Partie 1 (DOC/CONTEXT.md §Oracle).
+le cœur de la Partie 1 (DOC/00_FONDATIONS.md §Oracle).
 """
 
 from __future__ import annotations

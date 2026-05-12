@@ -309,7 +309,8 @@ def main(cfg: DictConfig) -> None:
                 "Oracle checkpoint requis. Override Hydra : "
                 "`oracle_checkpoint=path/to/ckpt.pt`"
             )
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        from infra.machine import MachineProfile
+        device = MachineProfile.detect().device
         oracle = _load_oracle(
             str(oracle_checkpoint), vocab,
             d_model=cfg.model.d_model, n_heads=cfg.model.n_heads,

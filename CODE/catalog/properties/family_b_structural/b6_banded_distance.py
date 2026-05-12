@@ -1,7 +1,7 @@
 """
 b6_banded_distance.py — Property B6 : distance à la classe à bande (banded).
 
-Spec : DOC/00b B6. Mesure ε_B(A) sur grille de bandwidth + bandwidth
+Spec : DOC/CATALOGUE B6. Mesure ε_B(A) sur grille de bandwidth + bandwidth
 optimal. Une attention locale focalisée (SWA-like) aura ε petit pour un
 small bandwidth.
 

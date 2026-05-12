@@ -1,4 +1,4 @@
-"""Famille C — Propriétés statistiques par token (DOC/00b §C).
+"""Famille C — Propriétés statistiques par token (DOC/CATALOGUE §C).
 
 C1 S_KL vs baseline empirique, C2 KL vs uniform causale, C3 entropie Shannon,
 C4 entropie Rényi, C5 variance par tête, C6 S_Grad, C7-C8 Fisher, C9 Wasserstein.

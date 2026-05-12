@@ -1,7 +1,7 @@
 """
 block_diagonal.py — Projecteur Block-Diagonal.
 
-Spec : DOC/00b B5 (block_diag), DOC/glossaire §H-matrix.
+Spec : DOC/CATALOGUE B5 (block_diag), DOC/glossaire §H-matrix.
 
 Une matrice block-diagonale a A_{ij} = 0 si (i // block) ≠ (j // block).
 La projection orthogonale Frobenius est : garder les blocs sur la diagonale,

@@ -28,7 +28,7 @@ class Projector(ABC):
     - Paramétrées : `Cauchy(poles_x, poles_y)`, `Vandermonde(base)`, ...
 
     Convention de naming : la sous-classe expose `name` (snake_case) +
-    `family` (lettre DOC/00b, généralement "B" pour structurelles).
+    `family` (lettre DOC/CATALOGUE, généralement "B" pour structurelles).
     """
 
     name: str = ""

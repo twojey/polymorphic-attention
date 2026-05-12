@@ -1,7 +1,7 @@
 """
 g2_symmetry.py — Property G2 : symétrie / antisymétrie.
 
-Spec : DOC/00b §G2.
+Spec : DOC/CATALOGUE §G2.
 
 ε_sym(A) = ‖A − Aᵀ‖_F / ‖A‖_F
 ε_anti(A) = ‖A + Aᵀ‖_F / ‖A‖_F

@@ -257,7 +257,8 @@ def main(cfg: DictConfig) -> None:
     )
 
     # --- Oracle baseline ---
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    from infra.machine import MachineProfile
+    device = MachineProfile.detect().device
     oracle_cfg = OracleConfig(
         vocab_size=vocab.size,
         d_model=cfg.model.d_model, n_heads=cfg.model.n_heads,

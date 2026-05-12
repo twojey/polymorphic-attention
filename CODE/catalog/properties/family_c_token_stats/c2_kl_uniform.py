@@ -1,7 +1,7 @@
 """
 c2_kl_uniform.py — Property C2 : KL divergence vs uniforme causale.
 
-Spec : DOC/00b §C2 "KL(A[t,:] ‖ uniform_t)".
+Spec : DOC/CATALOGUE §C2 "KL(A[t,:] ‖ uniform_t)".
 
 Pour chaque ligne A[t,:] (distribution sur N positions key), compare à la
 distribution uniforme. Variante causale : uniform sur les t+1 premières

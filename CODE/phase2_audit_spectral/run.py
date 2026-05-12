@@ -54,7 +54,7 @@ from phase2_audit_spectral.batteries import (
 )
 from phase2_audit_spectral.batteries.battery_a import fit_additive_composition, fit_class_with_residual
 from phase2_audit_spectral.batteries.battery_d import battery_d_analysis
-from phase2_audit_spectral.checkpoint import Phase2State
+from phase2_audit_spectral.checkpoint import create_or_resume as _phase2_create_or_resume
 from phase2_audit_spectral.head_specialization import diagnose_heads, top_specialized_heads
 from phase2_audit_spectral.signal_decoupling import (
     diagnose_s_spectral_decoupling,
@@ -260,14 +260,14 @@ def main(cfg: DictConfig) -> None:
     )
     state_dir = Path(OmegaConf.select(cfg, "checkpoint.dir") or default_state_dir)
     resume_enabled = bool(OmegaConf.select(cfg, "checkpoint.enabled") or True)
-    state, is_resumed = Phase2State.create_or_resume(
+    state, is_resumed = _phase2_create_or_resume(
         state_dir,
         seq_lens=seq_lens, n_examples_total=B,
         svd_device=svd_device, svd_precision=svd_precision,
     )
     if not resume_enabled:
         state.clean()
-        state, is_resumed = Phase2State.create_or_resume(
+        state, is_resumed = _phase2_create_or_resume(
             state_dir, seq_lens=seq_lens, n_examples_total=B,
             svd_device=svd_device, svd_precision=svd_precision,
         )

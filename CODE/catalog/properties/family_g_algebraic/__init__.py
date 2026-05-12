@@ -1,4 +1,4 @@
-"""Famille G — Propriétés algébriques (DOC/00b §G).
+"""Famille G — Propriétés algébriques (DOC/CATALOGUE §G).
 
 G1 trace/det, G2 symétrie/antisymétrie, G3 idempotence, G4 polynômes
 caractéristiques, G5 additivité, G6 Bernstein-Sato (V3), G7 D-module (V3),

@@ -1,7 +1,7 @@
 """
 k1_laplacian_spectrum.py — Property K1 : spectre du Laplacien graphe.
 
-Spec : DOC/CATALOGUE §K1 (anciennement DOC/00b §K1).
+Spec : DOC/CATALOGUE §K1 (anciennement DOC/CATALOGUE §K1).
 
 L'attention A peut être vue comme la matrice d'adjacence d'un graphe pondéré
 dirigé. Pour étudier sa structure topologique, on regarde le Laplacien :

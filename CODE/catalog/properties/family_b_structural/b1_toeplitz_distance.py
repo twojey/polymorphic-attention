@@ -1,7 +1,7 @@
 """
 b1_toeplitz_distance.py — Property B1 : distance de Frobenius à la classe Toeplitz.
 
-Spec : DOC/00b B1.
+Spec : DOC/CATALOGUE B1.
 
 ε_T(A) = ‖A − P_T(A)‖_F / ‖A‖_F
 

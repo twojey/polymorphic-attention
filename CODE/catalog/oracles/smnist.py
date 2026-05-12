@@ -1,7 +1,7 @@
 """
 smnist.py — SMNISTOracle : adapter Structure-MNIST sur le pipeline catalog.
 
-Spec : DOC/CONTEXT.md §Oracle.
+Spec : DOC/00_FONDATIONS.md §Oracle.
 
 Wrappe l'Oracle phase 1 existant (`phase1_metrologie/oracle/transformer.py`)
 en exposant l'interface AbstractOracle. Le `regime_grid()` reproduit le

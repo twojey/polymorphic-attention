@@ -1,7 +1,7 @@
 """
 g1_trace_det.py — Property G1 : trace, déterminant, eigenvalues stats.
 
-Spec : DOC/00b §G1.
+Spec : DOC/CATALOGUE §G1.
 
 Invariants algébriques canoniques d'une matrice carrée :
 - tr(A) = Σ A_ii, somme des eigenvalues

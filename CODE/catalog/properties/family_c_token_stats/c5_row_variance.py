@@ -1,7 +1,7 @@
 """
 c5_row_variance.py — Property C5 : variance des coefficients par ligne.
 
-Spec : DOC/00b §C5 "var(A[t,h,:])".
+Spec : DOC/CATALOGUE §C5 "var(A[t,h,:])".
 
 Pour chaque ligne d'attention A[t,:] (distribution sur les keys), calcule
 la variance des coefficients :

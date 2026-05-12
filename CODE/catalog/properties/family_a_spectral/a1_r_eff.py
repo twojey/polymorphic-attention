@@ -1,7 +1,7 @@
 """
 a1_r_eff.py — Property A1 : rang effectif r_eff(θ).
 
-Spec : DOC/00b A1 + DOC/02 §3 + DOC/glossaire §Rang effectif.
+Spec : DOC/CATALOGUE A1 + DOC/02 §3 + DOC/glossaire §Rang effectif.
 
 r_eff(θ) = min { k : (Σ_{i<k} σ_i²) / Σ_j σ_j² ≥ θ }
 

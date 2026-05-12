@@ -1,7 +1,7 @@
 """
 g3_idempotence.py — Property G3 : idempotence.
 
-Spec : DOC/00b §G3.
+Spec : DOC/CATALOGUE §G3.
 
 ε_idem(A) = ‖A² − A‖_F / ‖A‖_F
 

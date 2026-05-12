@@ -524,7 +524,8 @@ def main(cfg: DictConfig) -> None:
         max_seq_len=cfg.model.max_seq_len, dropout=cfg.model.dropout,
         n_classes=cfg.model.n_classes, pad_id=vocab.PAD,
     )
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    from infra.machine import MachineProfile
+    device = MachineProfile.detect().device
     oracle = _load_oracle(str(oracle_checkpoint), vocab, model_cfg, device=device)
     print(f"Oracle chargé depuis {oracle_checkpoint} sur device {device}", flush=True)
 

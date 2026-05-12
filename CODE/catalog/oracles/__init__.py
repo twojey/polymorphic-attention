@@ -1,6 +1,6 @@
 """Oracles — adapters fournissant des matrices d'attention à la Battery.
 
-Spec : DOC/CONTEXT.md §Oracle.
+Spec : DOC/00_FONDATIONS.md §Oracle.
 
 Pattern : interface AbstractOracle + adapters concrets par domaine
 (SMNIST, LL, vision, code). Permet la comparaison cross-domain qui est le

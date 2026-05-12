@@ -1,7 +1,7 @@
 """
 l1_fft2d_energy.py — Property L1 : énergie spectrale 2D.
 
-Spec : DOC/00b §L1 "spectre Fourier 2D de A".
+Spec : DOC/CATALOGUE §L1 "spectre Fourier 2D de A".
 
 Calcule la FFT 2D de A et reporte :
 - Énergie basse fréquence (|f| ≤ r_low × N/2) / énergie totale

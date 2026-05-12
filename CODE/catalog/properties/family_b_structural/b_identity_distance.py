@@ -5,7 +5,7 @@ Baseline trivial. Sur attention dense softmax, on s'attend à ε_I ≈ 1
 (les matrices ne sont presque jamais diagonales). Sert de plancher de
 comparaison pour Toeplitz/Hankel/Cauchy.
 
-NB : pas une propriété "officielle" du catalogue DOC/00b mais utile en
+NB : pas une propriété "officielle" du catalogue DOC/CATALOGUE mais utile en
 ablation. Identifiant `B0_identity_distance` (avant B1) par convention.
 """
 

@@ -1,13 +1,13 @@
 """
 hankel.py — Projecteur Hankel (moyenne par anti-diagonale).
 
-Spec : DOC/glossaire §Matrice de Hankel, DOC/00b B2.
+Spec : DOC/glossaire §Matrice de Hankel, DOC/CATALOGUE B2.
 
 H_{ij} = h_{i+j}. Constante sur chaque anti-diagonale. La projection
 orthogonale Frobenius P_H(A)_{ij} = moyenne des A_{i'j'} sur i' + j' = i + j.
 
 Le rang de Hankel est lié à l'ordre minimal d'un système LTI qui génère
-la matrice (Ho-Kalman, DOC/00b famille P).
+la matrice (Ho-Kalman, DOC/CATALOGUE famille P).
 """
 
 from __future__ import annotations

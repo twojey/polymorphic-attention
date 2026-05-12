@@ -3,7 +3,7 @@
 Une Property = un fichier ~30-80 lignes, identifiée par `name` et `family`,
 sérialisable (retourne dict de scalaires). Composée dans Battery selon niveau.
 
-Voir DOC/CONTEXT.md §Property + DOC/00b catalogue exhaustif.
+Voir DOC/00_FONDATIONS.md §Property + DOC/CATALOGUE catalogue exhaustif.
 
 Auto-discovery : ce __init__ importe tous les sous-modules family_*/ pour
 déclencher les `@register_property` décorateurs. Les Properties deviennent

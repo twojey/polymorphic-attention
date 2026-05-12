@@ -1,7 +1,7 @@
 """
 o1_toeplitz_displacement_rank.py — Property O1 : rang de déplacement Toeplitz.
 
-Spec : DOC/00b §O1.
+Spec : DOC/CATALOGUE §O1.
 
 L'opérateur de déplacement Toeplitz est :
 

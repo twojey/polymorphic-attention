@@ -1,4 +1,4 @@
-"""Famille L — Propriétés fréquentielles (DOC/00b §L).
+"""Famille L — Propriétés fréquentielles (DOC/CATALOGUE §L).
 
 L1 FFT 2D, L2 wavelets, L3 quasi-périodicité, L4-L6 microlocal.
 

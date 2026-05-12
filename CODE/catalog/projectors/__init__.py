@@ -1,12 +1,12 @@
 """Projectors — primitives mathématiques structures (Toeplitz, Hankel, Cauchy, ...).
 
-Spec : DOC/CONTEXT.md §Projector. Un Projector implémente UNE classe de
+Spec : DOC/00_FONDATIONS.md §Projector. Un Projector implémente UNE classe de
 matrices structurées via :
 - `project(A) → A_projected` : projection orthogonale Frobenius
 - `epsilon(A) → tensor scalaire` : ε_C = ‖A − P_C(A)‖_F / ‖A‖_F
 - `residual(A) → A − P_C(A)` : pour analyse Batterie B
 
-Consommé par les Properties de family B (structurelles) du catalogue DOC/00b.
+Consommé par les Properties de family B (structurelles) du catalogue DOC/CATALOGUE.
 """
 
 from catalog.projectors.base import Projector

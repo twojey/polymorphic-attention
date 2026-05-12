@@ -1,7 +1,7 @@
 """
 base.py — interface abstraite Property et PropertyContext.
 
-Spec : DOC/CONTEXT.md §Property, §PropertyContext.
+Spec : DOC/00_FONDATIONS.md §Property, §PropertyContext.
 
 Une Property calcule UNE mesure mathématique sur une matrice d'attention.
 Single-responsibility : NE logge PAS à MLflow elle-même, retourne un dict
@@ -72,13 +72,13 @@ class PropertyContext:
 class Property(ABC):
     """Une mesure mathématique sur une matrice d'attention.
 
-    Spec : DOC/00b catalogue (A1-W6, 131 propriétés).
+    Spec : DOC/CATALOGUE catalogue (A1-W6, 131 propriétés).
     Sous-classes : un fichier dédié par mesure dans
     `catalog/properties/family_<x>_<nom>/`.
 
     Convention metadata (class attributes à override) :
     - `name` : identifiant unique (ex `A1_r_eff_theta099`)
-    - `family` : lettre catalogue DOC/00b (A, B, C, ..., W)
+    - `family` : lettre catalogue DOC/CATALOGUE (A, B, C, ..., W)
     - `cost_class` : 1 (fast < 1s/régime) à 5 (slow > 1min)
     - `requires_fp64` : True si la précision FP32 dégrade le verdict
     - `requires_symmetric` : True si la mesure suppose A = Aᵀ
@@ -139,7 +139,7 @@ class Property(ABC):
             if cls.family not in {chr(c) for c in range(ord("A"), ord("W") + 1)}:
                 raise TypeError(
                     f"Property {cls.name} : family={cls.family!r} doit être "
-                    f"une lettre A-W (catalogue DOC/00b)."
+                    f"une lettre A-W (catalogue DOC/CATALOGUE)."
                 )
             if cls.cost_class not in (1, 2, 3, 4, 5):
                 raise TypeError(

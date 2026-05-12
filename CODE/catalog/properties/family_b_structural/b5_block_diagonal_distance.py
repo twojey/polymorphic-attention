@@ -1,7 +1,7 @@
 """
 b5_block_diagonal_distance.py — Property B5 : distance à la classe block-diagonale.
 
-Spec : DOC/00b B5. Mesure ε_BD(A) pour une taille de bloc donnée.
+Spec : DOC/CATALOGUE B5. Mesure ε_BD(A) pour une taille de bloc donnée.
 
 Pour balayer plusieurs `block_size` candidats, on renvoie la **meilleure**
 (plus petit ε) et le block_size correspondant. Choix par défaut des

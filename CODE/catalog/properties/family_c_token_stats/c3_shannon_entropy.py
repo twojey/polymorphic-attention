@@ -1,7 +1,7 @@
 """
 c3_shannon_entropy.py — Property C3 : entropie de Shannon par ligne.
 
-Spec : DOC/00b §C3 "H(A[t,:])".
+Spec : DOC/CATALOGUE §C3 "H(A[t,:])".
 
 H(p) = − Σ p_i log p_i en nats. Normalisation possible : H/log(N) ∈ [0, 1].
 

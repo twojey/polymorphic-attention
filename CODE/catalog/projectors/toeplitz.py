@@ -1,7 +1,7 @@
 """
 toeplitz.py — Projecteur Toeplitz (moyenne par diagonale).
 
-Spec : DOC/glossaire §Matrice de Toeplitz, DOC/00b B1.
+Spec : DOC/glossaire §Matrice de Toeplitz, DOC/CATALOGUE B1.
 
 T_{ij} = t_{i−j}. Constante sur chaque diagonale. La projection orthogonale
 Frobenius P_T(A)_{ij} = moyenne des A_{i'j'} sur i' − j' = i − j.

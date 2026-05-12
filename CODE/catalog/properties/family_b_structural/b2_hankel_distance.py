@@ -1,12 +1,12 @@
 """
 b2_hankel_distance.py — Property B2 : distance de Frobenius à la classe Hankel.
 
-Spec : DOC/00b B2, DOC/glossaire §Matrice de Hankel.
+Spec : DOC/CATALOGUE B2, DOC/glossaire §Matrice de Hankel.
 
 ε_H(A) = ‖A − P_H(A)‖_F / ‖A‖_F
 
 Le rang Hankel d'une matrice est lié à l'ordre minimal du système LTI qui
-la génère (Ho-Kalman, DOC/00b famille P). Phase 2 sur SMNIST a montré
+la génère (Ho-Kalman, DOC/CATALOGUE famille P). Phase 2 sur SMNIST a montré
 ~33 % des régimes "less bad" → Hankel-winner mais ε > 0.45 partout.
 """
 

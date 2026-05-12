@@ -1,7 +1,7 @@
 """
 levels.py — niveaux de Battery paramétrables (minimal | principal | extended | full | research).
 
-Spec : DOC/CONTEXT.md §Battery.
+Spec : DOC/00_FONDATIONS.md §Battery.
 
 Une fonction par niveau retourne une `Battery` pré-composée. La sélection
 des Properties activées suit la convention `cost_class` (≤ 2 pour minimal,

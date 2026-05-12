@@ -1,7 +1,7 @@
 """
 b7_tropical_degeneracy.py — Property B7 : tropical degeneracy.
 
-Spec : DOC/00b §B7 "hiérarchie magnitude log-échelle : ordonnancement des
+Spec : DOC/CATALOGUE §B7 "hiérarchie magnitude log-échelle : ordonnancement des
 termes dominants".
 
 L'idée tropicale : sur le semiring (max, +), une matrice est "dégénérée"

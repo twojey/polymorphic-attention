@@ -1,6 +1,6 @@
 """Famille O — Rangs de déplacement (Kailath / Pan).
 
-Spec : DOC/00b §O.
+Spec : DOC/CATALOGUE §O.
 
 L'opérateur de déplacement ∇_Z(A) = A − Z·A·Zᵀ (avec Z shift down) annule
 exactement les matrices Toeplitz. Plus généralement, les classes de matrices

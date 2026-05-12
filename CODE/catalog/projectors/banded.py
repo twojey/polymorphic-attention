@@ -1,7 +1,7 @@
 """
 banded.py — Projecteur Banded (matrices à bande).
 
-Spec : DOC/00b B6, DOC/glossaire §Matrice à bande.
+Spec : DOC/CATALOGUE B6, DOC/glossaire §Matrice à bande.
 
 Une matrice à bande de largeur w a A_{ij} = 0 si |i − j| > w. Capture
 l'attention locale focalisée (chaque token ne regarde que ses ±w voisins).

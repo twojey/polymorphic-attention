@@ -1,7 +1,7 @@
 """
 base.py — Battery : orchestre Oracle × Properties → résultats.
 
-Spec : DOC/CONTEXT.md §Battery.
+Spec : DOC/00_FONDATIONS.md §Battery.
 
 Une Battery prend en entrée :
 - un Oracle (qui fournit AttentionDump par régime)

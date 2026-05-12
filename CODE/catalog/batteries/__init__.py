@@ -1,6 +1,6 @@
 """Batteries — orchestration Oracle × Properties → résultats.
 
-Spec : DOC/CONTEXT.md §Battery.
+Spec : DOC/00_FONDATIONS.md §Battery.
 
 Une Battery exécute une liste de Properties sur les régimes fournis par un
 Oracle, agrège les sorties cross-régime en RegimeStats (V3.5 distributional),
