@@ -9,7 +9,7 @@
 # - PID + LOG_FILE affichés explicitement pour récupération
 #
 # Usage:
-#   bash OPS/env/launch_phase1b.sh [OPTIONS] -- [HYDRA_OVERRIDES]
+#   bash OPS/setup/launch_phase1b.sh [OPTIONS] -- [HYDRA_OVERRIDES]
 #
 # Options:
 #   --nohup              Lancer en background (nohup + disown)
@@ -19,9 +19,9 @@
 #   --help               Afficher cette aide
 #
 # Exemples:
-#   bash OPS/env/launch_phase1b.sh -- bench.n_examples=2000
-#   bash OPS/env/launch_phase1b.sh --nohup --log-prefix run4 -- s_spectral.K=32
-#   bash OPS/env/launch_phase1b.sh --nohup --watch -- s_kl.enabled=true
+#   bash OPS/setup/launch_phase1b.sh -- bench.n_examples=2000
+#   bash OPS/setup/launch_phase1b.sh --nohup --log-prefix run4 -- s_spectral.K=32
+#   bash OPS/setup/launch_phase1b.sh --nohup --watch -- s_kl.enabled=true
 #
 # Codes de sortie :
 #   0   succès complet (Python a return 0)

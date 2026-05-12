@@ -12,7 +12,7 @@
 # Usage : bash OPS/scripts/setup_pod.sh
 #
 # Pour un setup minimal et progressif (utile en debug), lancer chaque
-# script individuellement plutôt que ce wrapper. Cf. OPS/env/SETUP.md.
+# script individuellement plutôt que ce wrapper. Cf. OPS/setup/SETUP.md.
 
 set -euo pipefail
 

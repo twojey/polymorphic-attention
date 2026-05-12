@@ -5,7 +5,7 @@
 # Reprise du pattern launch_phase1b.sh (carnet 2026-05-11 refactor scripts robustes).
 #
 # Usage:
-#   bash OPS/env/launch_phase2.sh [OPTIONS] -- [HYDRA_OVERRIDES]
+#   bash OPS/setup/launch_phase2.sh [OPTIONS] -- [HYDRA_OVERRIDES]
 #
 # Options:
 #   --nohup              Lancer en background (nohup + disown)
@@ -21,9 +21,9 @@
 #   --help               Afficher cette aide
 #
 # Exemples:
-#   bash OPS/env/launch_phase2.sh --smoke -- attention_dump_dir=/workspace/phase1_extract
-#   bash OPS/env/launch_phase2.sh --nohup --gpu-fast
-#   bash OPS/env/launch_phase2.sh --nohup --watch
+#   bash OPS/setup/launch_phase2.sh --smoke -- attention_dump_dir=/workspace/phase1_extract
+#   bash OPS/setup/launch_phase2.sh --nohup --gpu-fast
+#   bash OPS/setup/launch_phase2.sh --nohup --watch
 #
 # Codes de sortie :
 #   0   succès complet

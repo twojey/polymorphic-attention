@@ -4,7 +4,7 @@
 # Reprise du pattern launch_phase1b.sh / launch_phase2.sh.
 #
 # Usage:
-#   bash OPS/env/launch_phase3.sh [OPTIONS] -- [HYDRA_OVERRIDES]
+#   bash OPS/setup/launch_phase3.sh [OPTIONS] -- [HYDRA_OVERRIDES]
 #
 # Options:
 #   --nohup              Lancer en background (nohup + disown)
@@ -18,8 +18,8 @@
 #   --help               Aide
 #
 # Exemples:
-#   bash OPS/env/launch_phase3.sh --smoke --backbone identity
-#   bash OPS/env/launch_phase3.sh --nohup --watch --backbone toeplitz \
+#   bash OPS/setup/launch_phase3.sh --smoke --backbone identity
+#   bash OPS/setup/launch_phase3.sh --nohup --watch --backbone toeplitz \
 #       --dump-dir /workspace/phase1_extract --smart-init
 #
 # Logs : OPS/logs/<prefix>_<UTC_TS>.log

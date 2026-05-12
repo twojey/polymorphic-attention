@@ -382,7 +382,7 @@ Le verdict "100 % orphan" est donc à **lire restreint** : 100 % orphan **du sou
 
 **Pré-requis lancement pod inchangé** :
 - git clean → status=registered
-- Variables BLAS=1 dans `OPS/env/launch_phase1b.sh` (déjà fait)
+- Variables BLAS=1 dans `OPS/setup/launch_phase1b.sh` (déjà fait)
 - Tunnel SSH MLflow ouvert
 - Checkpoint Oracle disponible (`s1_smnist_oracle_e2f0b5e_oracle.ckpt`)
 
@@ -566,7 +566,7 @@ Phase 1 complète : **63/63 tests passent** (51 existants + 12 nouveaux), aucune
 **Liens** :
 - MLflow Run 1 : `5e5ead1e`, Run 2 : `389383a2`, Run 4 : `87ebc2d0`.
 - Configs comparées : `OPS/logs/mlflow/artifacts/3/{runid}/artifacts/config.yaml`.
-- Pod CPU procédure : `OPS/env/POD_CPU_SETUP.md`.
+- Pod CPU procédure : `OPS/setup/POD_CPU_SETUP.md`.
 - Wrapper Run 3 : `OPS/scripts/run_phase1b_skl.sh`.
 
 ### 2026-05-11 14:30 UTC — Refactor extract.py : API streaming per-layer + windowed (préparation phase 2)
@@ -855,7 +855,7 @@ fin chaîne → fermeture pod possible
 
 **Test unitaire validé** (avant déploiement) : 3 cas (N=baseline OK, N<baseline slice+renorm OK, N>baseline raise OK).
 
-**How to apply** : `./OPS/env/launch_phase1b.sh -- bench.n_examples=2000 s_kl.enabled=true bench.structured_deltas=[16,64,256]`. Wrapper Run 3 sur le pod : `/root/run3_skl.sh`.
+**How to apply** : `./OPS/setup/launch_phase1b.sh -- bench.n_examples=2000 s_kl.enabled=true bench.structured_deltas=[16,64,256]`. Wrapper Run 3 sur le pod : `/root/run3_skl.sh`.
 
 ### 2026-05-11 (matin) — Optim S_Spectral via multiprocessing.Pool partagé
 **#decision** Le re-run 2000-ex lancé hier soir a crashé à 06:31 (cause : `MLFLOW_TRACKING_URI` pas exportée par `launch_phase1b.sh`). Avant relance, deux fixes appliqués :
@@ -865,12 +865,12 @@ fin chaîne → fermeture pod possible
 
 **Why** : 4 vCPUs sur le VPS, 1 seul utilisé en mode séquentiel single-thread BLAS. Le multiprocessing avec BLAS=1 par worker est le seul moyen safe d'utiliser les 4 cores sans réintroduire le deadlock.
 
-**How to apply** : `./OPS/env/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false` (le code parallèle est transparent — pas de nouveau flag).
+**How to apply** : `./OPS/setup/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false` (le code parallèle est transparent — pas de nouveau flag).
 
 ### 2026-05-11 — Force BLAS single-threaded pour éviter deadlock eigvalsh
-**#decision** Suite au deadlock 38h (2026-05-10 17:35→2026-05-11 06:22), les runs phase 1.5 lancés via `OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1` en mode blocking. Créé `OPS/env/launch_phase1b.sh` qui injecte ces vars systématiquement. Tout re-run phase 1.5+ DOIT passer par ce script ou setup_env.sh mis à jour.
+**#decision** Suite au deadlock 38h (2026-05-10 17:35→2026-05-11 06:22), les runs phase 1.5 lancés via `OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1` en mode blocking. Créé `OPS/setup/launch_phase1b.sh` qui injecte ces vars systématiquement. Tout re-run phase 1.5+ DOIT passer par ce script ou setup_env.sh mis à jour.
 **Why** : deadlock reproductible et déterministe sur matrices rank-deficient grandes avec multi-thread BLAS.
-**How to apply** : `./OPS/env/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false`. Ou sourcer les vars avant un run manuel.
+**How to apply** : `./OPS/setup/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false`. Ou sourcer les vars avant un run manuel.
 
 ### 2026-05-10 — Bench phase 1.5 réduit (Δ ∈ [16,64]) pour contrainte mémoire VPS
 **#decision** Le run VPS a OOM à 9.4 GB sur 32 ex avec Δ jusqu'à 256 (seq_len ~4100). Réduction de structured_deltas à [16, 64] → seq max 1043 → mémoire ~1.5 GB/batch. **Pas une optimisation post-hoc**, c'est une contrainte hardware.
@@ -924,7 +924,7 @@ fin chaîne → fermeture pod possible
 **#decision** Pour qu'un nouveau VPS ou poste de travail puisse atteindre les pods sans recréer de clé. Couvert par règle `secrets/` du `.gitignore` racine.
 
 ### 2026-05-10 — Splitter `setup_env.sh` en scripts modulaires dédiés
-**#decision** Un script = une responsabilité. `blackwell_env.sh` (ENV vars), `install_uv.sh`, `install_python_deps.sh`, `verify_torch.sh`, `setup_pod.sh` (orchestrateur). Documenté dans `OPS/env/SETUP.md`. setup_env.sh devient wrapper de compat.
+**#decision** Un script = une responsabilité. `blackwell_env.sh` (ENV vars), `install_uv.sh`, `install_python_deps.sh`, `verify_torch.sh`, `setup_pod.sh` (orchestrateur). Documenté dans `OPS/setup/SETUP.md`. setup_env.sh devient wrapper de compat.
 
 ### 2026-05-10 — Sprint 1 mono-Oracle (SMNIST seul)
 **#decision** ROADMAP §stratification : multi-Oracle (code synthétique, vision) reporté Sprint 4. Permet d'avoir un livrable autonome après chaque sprint.
@@ -964,7 +964,7 @@ Idem ci-dessus, redondant — à fusionner après le run.
 ### 2026-05-11 — Deadlock BLAS multi-thread dans compute_s_spectral eigvalsh
 **#bug** Run 2000-ex lancé 2026-05-10 17:35 s'est accroché pendant ~38h dans `torch.linalg.eigvalsh(M_reg)` (phase1b_calibration_signal/signals/s_spectral.py:98). Analyse stack: 6/9 threads en `futex_wait` (lock contention BLAS). Cause : OpenBLAS/MKL multi-thread avec plusieurs threads attendant une ressource partagée dans l'eigvalsh kernel.
 **Leçon** : PyTorch `linalg.eigvalsh()` sur matrices grandes (K=64, B*H*N=~100k batches) en parallèle OpenBLAS = deadlock déterministe si BLAS threads > 1.
-**Fix** : (1) Patcher `compute_s_spectral()` pour warning + logging par couche ; (2) créer `OPS/env/launch_phase1b.sh` qui force `OPENBLAS_NUM_THREADS=1` + `MKL_NUM_THREADS=1` + `OMP_NUM_THREADS=1` + `NUMEXPR_NUM_THREADS=1` ; (3) re-run avec env vars, fin estimée ~01:35 le 2026-05-11 matin.
+**Fix** : (1) Patcher `compute_s_spectral()` pour warning + logging par couche ; (2) créer `OPS/setup/launch_phase1b.sh` qui force `OPENBLAS_NUM_THREADS=1` + `MKL_NUM_THREADS=1` + `OMP_NUM_THREADS=1` + `NUMEXPR_NUM_THREADS=1` ; (3) re-run avec env vars, fin estimée ~01:35 le 2026-05-11 matin.
 **À faire post-run** : tester si GPU SVD (device=cuda) est stable (cuSOLVER généralement n'a pas ce problème).
 
 ### 2026-05-10 — VPS OOM kill : capture_attn=True matérialise N²×6×8 simultanément
@@ -1215,7 +1215,7 @@ Run `s1_smnist_oracle_e2f0b5e` finished à **15:05 Paris** après 12 epochs (2h0
 
 #### 11:00-12:30 Paris — restructuration scripts setup
 - Création `blackwell_env.sh` (source-only), `install_uv.sh`, `install_python_deps.sh`, `verify_torch.sh`, `setup_pod.sh`, `start_mlflow_tunnel.sh`.
-- `OPS/env/SETUP.md` : walkthrough complet pod-from-scratch + troubleshooting.
+- `OPS/setup/SETUP.md` : walkthrough complet pod-from-scratch + troubleshooting.
 - Clé SSH copiée dans `OPS/secrets/` (gitignored).
 - Mémoire `reference_setup_docs.md` indexée dans `MEMORY.md`.
 - Commit `38fc01b`.
@@ -1251,6 +1251,6 @@ Run `s1_smnist_oracle_e2f0b5e` finished à **15:05 Paris** après 12 epochs (2h0
 - Glossaire : `DOC/glossaire.md`
 - Falsifiabilité : `DOC/falsifiabilite.md`
 - Templates rapports : `DOC/reports/phase{1,1b,2,3,4,5}_template.md`
-- Setup pod : `OPS/env/SETUP.md`
+- Setup pod : `OPS/setup/SETUP.md`
 - ROADMAP exécution : `ROADMAP.md`
 - MLflow : http://localhost:5000 (via tunnel SSH depuis poste local)

@@ -149,7 +149,7 @@ PYTHONPATH=CODE uv run python -m phase2_audit_spectral.run \
 - `DOC/01b_phase_calibration_signal.md` — spec phase 1.5
 - `DOC/falsifiabilite.md` — règles d'application du protocole
 - `DOC/glossaire.md` — terminologie V3.5 canonique
-- `OPS/env/SETUP.md` — setup pod (au cas où on le rebrancherait Sprint 2+)
+- `OPS/setup/SETUP.md` — setup pod (au cas où on le rebrancherait Sprint 2+)
 - `OPS/env/STACK.md` — stack ML, contraintes Blackwell (info pour pod si réactivation)
 
 ---

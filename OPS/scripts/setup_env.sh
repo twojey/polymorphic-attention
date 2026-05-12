@@ -10,7 +10,7 @@
 # Ou l'orchestrateur full pod-from-scratch :
 #   - bash OPS/scripts/setup_pod.sh
 #
-# Documentation complète : OPS/env/SETUP.md
+# Documentation complète : OPS/setup/SETUP.md
 
 set -euo pipefail
 

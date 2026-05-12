@@ -382,7 +382,7 @@ OPS/
 ```
 
 **Structure clés** :
-- `OPS/env/SETUP.md` : **À LIRE EN PREMIER** pour setup pod
+- `OPS/setup/SETUP.md` : **À LIRE EN PREMIER** pour setup pod
 - `OPS/logs/` : Logs persistent avec horodatage (obligatoire robustesse scripts)
 - `OPS/configs/` : Configuration Hydra centralisée par phase
 - `OPS/scripts/` : Scripts modulaires (une responsabilité = un script)

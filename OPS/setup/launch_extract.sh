@@ -5,7 +5,7 @@
 # Reprise du pattern launch_phase1b.sh (carnet 2026-05-11 refactor scripts robustes).
 #
 # Usage:
-#   bash OPS/env/launch_extract.sh [OPTIONS] -- [HYDRA_OVERRIDES]
+#   bash OPS/setup/launch_extract.sh [OPTIONS] -- [HYDRA_OVERRIDES]
 #
 # Options:
 #   --nohup              Lancer en background (nohup + disown)
@@ -16,8 +16,8 @@
 #   --help               Afficher cette aide
 #
 # Exemples:
-#   bash OPS/env/launch_extract.sh --nohup --watch
-#   bash OPS/env/launch_extract.sh -- extraction.batch_size_cap=4 extraction.target_peak_gb=10
+#   bash OPS/setup/launch_extract.sh --nohup --watch
+#   bash OPS/setup/launch_extract.sh -- extraction.batch_size_cap=4 extraction.target_peak_gb=10
 #
 # Codes de sortie :
 #   0   succès complet

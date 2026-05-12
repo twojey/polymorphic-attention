@@ -38,7 +38,7 @@ POD_IP=$POD_IP POD_PORT=$POD_PORT bash OPS/scripts/start_mlflow_tunnel.sh
 # === Lancer phase 1.5 sur le pod (bench original Δ≤256) ===
 ssh -p $POD_PORT root@$POD_IP "cd /workspace/polymorphic-attention && \
   MLFLOW_TRACKING_URI=http://localhost:5000 \
-  ./OPS/env/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false"
+  ./OPS/setup/launch_phase1b.sh --nohup -- bench.n_examples=2000 s_kl.enabled=false"
 ```
 
 ---

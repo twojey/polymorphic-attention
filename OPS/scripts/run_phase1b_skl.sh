@@ -55,7 +55,7 @@ esac
 #   - vérifie les pré-conditions (uv, checkpoint, repo)
 #   - injecte les env vars BLAS / MLflow / PYTHONUNBUFFERED
 #   - gère le mode --nohup proprement (PID + log path affichés)
-exec bash "$REPO_ROOT/OPS/env/launch_phase1b.sh" \
+exec bash "$REPO_ROOT/OPS/setup/launch_phase1b.sh" \
     "${PASSTHRU[@]}" \
     --log-prefix run3_skl \
     -- \

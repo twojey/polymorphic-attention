@@ -108,7 +108,7 @@ def compute_s_spectral(
     if _bad:
         raise RuntimeError(
             f"BLAS multi-thread détecté ({_bad}). compute_s_spectral() refuse de tourner "
-            f"pour éviter le deadlock eigvalsh. Lance via OPS/env/launch_phase1b.sh ou exporte "
+            f"pour éviter le deadlock eigvalsh. Lance via OPS/setup/launch_phase1b.sh ou exporte "
             f"manuellement {'='.join(_required_blas_vars)}=1 avant l'import de torch. "
             f"Voir DOC/carnet 2026-05-11."
         )
