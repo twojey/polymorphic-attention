@@ -611,31 +611,63 @@ Plusieurs verdicts possibles, anticipés pour cadrer la suite (cf. carnet 2026-0
 
 ### 3.9 — Plan de réorientation si NO-GO total
 
-Le verdict phase 2 actuel ("100 % orphan") porte sur **3 projecteurs sur ~17 prévus dans le catalogue DOC/00b**. Avant de conclure que ASP n'est pas viable, on doit avoir testé exhaustivement le catalogue.
+**Constat — catalogue réellement spec'd** : DOC/00b a **131 propriétés** indexées (23 familles A-W) + DOC/00c a **30 prédictions/signatures** = **~161 tests dans la doc**. Le verdict phase 2 actuel ("100 % orphan") porte sur **3 projecteurs** seulement (Toeplitz B1, Hankel B2, Identity placeholder), soit **~2 %** du catalogue prévu. Avant de conclure que ASP n'est pas viable, on doit tester un sous-ensemble représentatif beaucoup plus large.
 
-Sprint A — **Implémentation projecteurs manquants** (5-7 jours dev) :
-- B3 Cauchy + Vandermonde (avec poles/base appris)
-- B5 Block-diagonal, B6 Banded
-- O2 Cauchy-like, O3 Vandermonde-like (rangs de déplacement)
-- P1-P4 Ho-Kalman block + HSV + ordre minimal
-- T équivariances (circulantes, block-circulantes)
-- U1-U5 Butterfly, Monarch, Pixelfly, Block-sparse, Sparse+low-rank
-- Compositions : multiplicative `M_1·M_2`, hiérarchique par layer, mélange par tête
+**Familles DOC/00b à exploiter** (par ordre de pertinence vu signal phase 2 résidu rank-1) :
+
+| Famille | n | Pertinence post-phase 2 | Prioritaire ? |
+|---|---|---|---|
+| **A Spectrales** | 9 | r_eff, conditionnement, decay → partiellement fait | medium |
+| **B Structurelles** | 9 | Toeplitz/Hankel fait, manque Cauchy/Vandermonde/Banded/Block/Tropical/Sylvester | **HIGH** |
+| **C Stats par token** | 9 | KL/entropies/Fisher → utile pour signal phase 4 | medium |
+| **D Géométriques** | 7 | cosine sim, angles subspaces, wave fronts | low |
+| **E Information** | 2 | mutual info, compressibilité | low |
+| **F Dynamiques** | 2 | Lipschitzness | low |
+| **G Algébriques** | 8 | trace/det/symétries/polynômes | medium |
+| **H Cross-layer** | 4 | résidus, évolution rang par couche | medium |
+| **I Cross-head** | 3 | partiellement fait (spec_h) | done |
+| **J Markov** | 4 | Markov-ness, stationnaire | low |
+| **K Topo/graphes** | 4 | Laplacien, persistent homology | low |
+| **L Fréquentielles** | 6 | **FFT 2D**, wavelets, quasi-périodicité | **HIGH** |
+| **M Conditionnelles entrée** | 2 | sensitivity vs (ω,Δ,ℋ) | medium |
+| **N Comparatives Oracle/student** | 3 | F-divergence, distillation | medium |
+| **O Rang de déplacement** | 5 | Cauchy-like, Vandermonde-like | **HIGH** |
+| **P Ho-Kalman** | 6 | rang Hankel block, HSV, ordre minimal | **HIGH** |
+| **Q Hiérarchiques** | 6 | H-matrix, HSS, nestedness | **HIGH** |
+| **R Noyau Mercer/RKHS** | 10 | Mercer PD, RFF, Bochner | medium |
+| **S Tenseurs** | 5 | Tucker, Tensor Train, MERA/PEPS | medium |
+| **T Équivariances** | 6 | circulantes, block-circulantes, perm-inv | medium |
+| **U Sparse-structurées** | 5 | **Butterfly, Monarch, Block-sparse** | **HIGH** |
+| **V Opérateurs analytiques** | 10 | pseudo-différentiels, microlocal | research |
+| **W Complexité logique** | 6 | NIP, Shelah, definability | research |
+| **Total propriétés** | **131** | | |
+
+Plus DOC/00c (30 prédictions signatures) → ~25-30 additionnels à instrumenter.
+
+**Sprint A — Implémentation projecteurs prioritaires** (3-4 semaines dev pour les "HIGH" + medium) :
+- **Phase A.1 (1 sem)** : famille B complète (Cauchy avec poles appris, Vandermonde, Block-diag, Banded, Tropical, Sylvester)
+- **Phase A.2 (1 sem)** : famille O (rangs de déplacement) + famille P (Ho-Kalman block + HSV + ordre minimal)
+- **Phase A.3 (1 sem)** : famille U (Butterfly, Monarch, Pixelfly, Block-sparse, Sparse+low-rank) + famille L (FFT 2D, wavelets, quasi-périodicité)
+- **Phase A.4 (1 sem)** : famille Q (H-matrix, HSS, nestedness) + compositions multiplicatives + hiérarchique par couche
+
+Au moins **~60 propriétés** prioritaires à implémenter (vs 3 actuelles), soit ~45 % du catalogue.
 
 Sprint B — **Re-extraction dumps phase 1 V2** (~30 min + $0.30 sur pod) si non préservés.
 
-Sprint C — **Phase 2 V2 — batteries étendues** (1 jour compute + 2 jours analyse) :
-- Lancer `battery_a_v2` sur catalogue étendu (~25 projecteurs au lieu de 3)
-- Identifier la classe dominante réelle par régime (Cauchy ? Banded ? Block-sparse ?)
-- Mettre à jour dictionnaire SCH
+Sprint C — **Phase 2 V2 — batteries étendues** (2 jours compute + 5 jours analyse) :
+- Lancer `battery_a_v2` sur catalogue étendu (60 projecteurs au lieu de 3)
+- Cross-tabulation : quelles familles fittent quels régimes ?
+- Identifier la (les) classe(s) dominante(s) réelle(s) — Cauchy ? Butterfly ? Block-sparse ? Mélange ?
+- Mettre à jour dictionnaire SCH formellement
 
-Sprint D — **Phase 3 V3 avec Backbone vrai dérivé** (1-2 jours) :
+Sprint D — **Phase 3 V3+ avec Backbone vrai dérivé** (1-2 semaines) :
 - Au lieu de `IdentityBackbone` placeholder, utiliser le Backbone de la classe identifiée Sprint C
+- Architecture peut nécessiter refonte si classe ≠ Toeplitz/Hankel (exemple : ButterflyBackbone, BandedBackbone)
 - Re-tester ASPLayer avec architecture informée par la mesure
 
-**Coût total** : ~2 semaines wall-clock + ~$1.50 compute. Bénéfice : verdict scientifique robuste sur la nature de la structure SMNIST, fondations solides pour stratégie d'attention quasi-linéaire (ou conclusion négative motivée).
+**Coût total** : ~5-6 semaines wall-clock + ~$5-10 compute pod. Bénéfice : verdict scientifique **robuste** sur la nature de la structure SMNIST (~45 % du catalogue testé vs 2 %), fondations solides pour stratégie d'attention quasi-linéaire (ou conclusion négative motivée et publication d'une "batterie de tests" comme livrable Partie 1 cf. DOC/00b §I).
 
-Cf. carnet 2026-05-12 §"Question stratégique catalogue exhaustif" pour l'analyse complète des ~100 tests possibles et la matrice de priorité.
+Cf. carnet 2026-05-12 §"Question stratégique catalogue exhaustif" pour l'analyse complète et la matrice de priorité.
 
 ---
 
