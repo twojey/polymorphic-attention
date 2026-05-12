@@ -95,29 +95,40 @@ def svd_attention(
     target_dtype = torch.float64 if precision == "fp64" else torch.float32
 
     A_work = A.to(device=target_device, dtype=target_dtype)
-    try:
-        s = torch.linalg.svdvals(A_work)
-    except (RuntimeError, torch._C._LinAlgError) as exc:
-        # cuSolver SVD non-convergent sur matrices très rank-deficient :
-        # fallback connu eigvalsh(A A.T + εI) (cf. carnet 2026-05-11 §Run 3).
-        msg = (
-            f"[svd_pipeline] torch.linalg.svdvals a échoué sur tensor "
-            f"shape={tuple(A_work.shape)} dtype={target_dtype} "
-            f"device={target_device} : {exc}. "
-            f"Fallback eigvalsh(A A.T + εI)."
-        )
-        print(msg, file=sys.stderr, flush=True)
+
+    # Sur GPU, cuSolver SVD a un fallback interne lent quand les matrices
+    # d'attention softmax sont rank-deficient (carnet 2026-05-12 smoke pod
+    # phase 2). Bypass : eigvalsh(A·Aᵀ + εI) directement, plus rapide ET
+    # gère les rank-deficiencies sans fallback opaque.
+    # CPU FP64 garde svdvals (rapide, pas de problème de convergence).
+    use_eigvalsh = (target_device != "cpu")
+    if use_eigvalsh:
         eps = 1e-12 if target_dtype == torch.float64 else 1e-7
         AAt = A_work @ A_work.transpose(-2, -1)
-        # ridge diagonale ; eye broadcasté
-        eye = torch.eye(
-            AAt.size(-1), dtype=target_dtype, device=target_device
-        )
+        eye = torch.eye(AAt.size(-1), dtype=target_dtype, device=target_device)
         AAt = AAt + eps * eye
         eigvals = torch.linalg.eigvalsh(AAt)
-        # eigvalsh retourne ascendant → flip et clamp puis racine.
-        s2 = eigvals.flip(-1).clamp_min(0)
+        # eigvalsh retourne ordre ascendant → flip puis sqrt(clamp) pour s.
+        # On retire la ridge avant clamp pour rester fidèle aux vraies σ.
+        s2 = (eigvals.flip(-1) - eps).clamp_min(0)
         s = s2.sqrt()
+    else:
+        try:
+            s = torch.linalg.svdvals(A_work)
+        except (RuntimeError, torch._C._LinAlgError) as exc:
+            # Garde-fou CPU : fallback eigvalsh aussi si svdvals échoue.
+            msg = (
+                f"[svd_pipeline] svdvals CPU a échoué sur shape={tuple(A_work.shape)} "
+                f"dtype={target_dtype} : {exc}. Fallback eigvalsh."
+            )
+            print(msg, file=sys.stderr, flush=True)
+            eps = 1e-12 if target_dtype == torch.float64 else 1e-7
+            AAt = A_work @ A_work.transpose(-2, -1)
+            eye = torch.eye(AAt.size(-1), dtype=target_dtype, device=target_device)
+            AAt = AAt + eps * eye
+            eigvals = torch.linalg.eigvalsh(AAt)
+            s2 = (eigvals.flip(-1) - eps).clamp_min(0)
+            s = s2.sqrt()
 
     out: dict[str, torch.Tensor] = {"s": s.to(src_device)}
     for theta in theta_values:
