@@ -5,19 +5,13 @@ Spec : DOC/CATALOGUE §K2 "diagrammes de persistance H_0, H_1 sur la
 filtration sous-niveaux du graphe (1 − A) ; détecte cycles, composantes
 connexes émergent à différentes échelles".
 
-V1 sans gudhi/ripser (qui sont des deps lourdes) : on implémente le calcul
-de H_0 (composantes connexes) via union-find sur la filtration des
-distances (1 − A). On approxime H_1 (cycles) via la formule d'Euler :
-    χ = V − E + F → β_1 = 1 + E − V (pour graphe sans triangle)
-Plus précisément : β_1 = E − V + (n composantes connexes).
+Deux backends :
+1. **gudhi** (optional) : vraie persistence via filtration Rips ; précis
+   pour H_0/H_1/H_2. Activé si `import gudhi` réussit.
+2. **pure-torch fallback** : union-find pour H_0 + Euler pour H_1.
+   Approximation mais zero-dep.
 
-Si gudhi est disponible (optional import), on peut switcher vers le
-vrai calcul. V1 : version pure-torch sans dépendance externe.
-
-Sortie :
-- bottleneck lifetime de H_0 (durée de vie max d'une composante)
-- nombre de cycles H_1 (Betti 1)
-- distribution des "lifetimes" des composantes
+Sortie : β_0, β_1, lifetimes, backend utilisé.
 """
 
 from __future__ import annotations
@@ -26,6 +20,13 @@ import torch
 
 from catalog.properties.base import Property, PropertyContext
 from catalog.properties.registry import register_property
+
+try:
+    import gudhi as _gudhi  # type: ignore[import-not-found]
+    _HAS_GUDHI = True
+except ImportError:
+    _gudhi = None  # type: ignore[assignment]
+    _HAS_GUDHI = False
 
 
 class _UnionFind:
@@ -68,6 +69,36 @@ class K2PersistentHomology(Property):
     def __init__(self, max_edges: int = 4096, eps_floor: float = 1e-30) -> None:
         self.max_edges = max_edges
         self.eps_floor = eps_floor
+
+    def _compute_for_one_gudhi(self, A_sym: torch.Tensor) -> dict[str, float]:
+        """Backend gudhi : vraie persistence via Rips complex sur 1 - A."""
+        N = A_sym.shape[0]
+        # Distance = 1 - A (plus A grand = plus proche)
+        d = (1.0 - A_sym).clamp_min(0.0)
+        d_np = d.detach().cpu().numpy()
+        # Symétrise par sécurité
+        d_np = (d_np + d_np.T) / 2
+        # Rips complex
+        rips = _gudhi.RipsComplex(distance_matrix=d_np, max_edge_length=1.0)
+        simplex_tree = rips.create_simplex_tree(max_dimension=2)
+        persistence = simplex_tree.persistence()
+        # β_0 = nb de composantes connexes finales
+        # On compte les pairs (dim, (birth, death)) en dim 0 avec death = inf
+        beta_0 = sum(1 for p in persistence if p[0] == 0 and p[1][1] == float("inf"))
+        beta_1 = sum(1 for p in persistence if p[0] == 1)
+        # Lifetimes : pour les finite intervals
+        lifetimes_h0 = [p[1][1] - p[1][0] for p in persistence
+                        if p[0] == 0 and p[1][1] != float("inf")]
+        lifetimes_h1 = [p[1][1] - p[1][0] for p in persistence if p[0] == 1]
+        max_life = max(lifetimes_h0 + lifetimes_h1, default=0.0)
+        median_life = float(torch.tensor(lifetimes_h0).median().item()) if lifetimes_h0 else 0.0
+        return {
+            "beta_0_final": float(beta_0),
+            "beta_1": float(beta_1),
+            "max_lifetime": float(max_life),
+            "median_lifetime": median_life,
+            "n_edges_used": float(N * (N - 1) // 2),
+        }
 
     def _compute_for_one(self, A_sym: torch.Tensor) -> dict[str, float]:
         N = A_sym.shape[0]
@@ -144,9 +175,18 @@ class K2PersistentHomology(Property):
         flat = A_sym.reshape(n_total, N, N)[:n_proc]
 
         all_stats: list[dict[str, float]] = []
+        backend = "gudhi" if _HAS_GUDHI else "torch_unionfind"
+        compute_fn = (
+            self._compute_for_one_gudhi if _HAS_GUDHI else self._compute_for_one
+        )
         for k in range(n_proc):
-            stats = self._compute_for_one(flat[k])
-            all_stats.append(stats)
+            try:
+                stats = compute_fn(flat[k])
+                all_stats.append(stats)
+            except Exception:
+                if _HAS_GUDHI:
+                    # Fallback torch si gudhi crash sur un cas pathologique
+                    all_stats.append(self._compute_for_one(flat[k]))
 
         if not all_stats:
             return {"n_matrices": int(n_total), "skip_reason": "no valid mats"}
@@ -163,6 +203,7 @@ class K2PersistentHomology(Property):
             "tda_median_lifetime_median": _aggr("median_lifetime"),
             "tda_n_processed": int(n_proc),
             "tda_n_total": int(n_total),
+            "tda_backend": backend,
             "n_matrices": int(n_total),
             "seq_len": int(N),
         }

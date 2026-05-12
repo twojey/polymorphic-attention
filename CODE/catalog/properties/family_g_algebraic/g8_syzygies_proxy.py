@@ -48,8 +48,7 @@ class G8SyzygiesProxy(Property):
             raise ValueError(f"A doit être (B, H, N, N), reçu {A.shape}")
         B, H, N, _ = A.shape
 
-        A_work = A.to(device=ctx.device, dtype=ctx.dtype)
-        sigmas = torch.linalg.svdvals(A_work)  # (B, H, N)
+        sigmas = ctx.svdvals_cached(A)  # (B, H, N) — cache partagé Famille A
         max_per = sigmas.amax(dim=-1, keepdim=True).clamp_min(self.eps_floor)
         ratio = sigmas / max_per
         # Nullité numérique = nb σ_i < tol · σ_max

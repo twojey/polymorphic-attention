@@ -68,6 +68,21 @@ class PropertyContext:
         """Libère le cache (entre régimes ou après une Property volumineuse)."""
         self.cache.clear()
 
+    def svdvals_cached(self, A: torch.Tensor) -> torch.Tensor:
+        """SVD batchée cachée sur svdvals(A) — convention partagée.
+
+        Cache key compatible avec les Properties existantes (A1/A3/A4/A5/A6,
+        E2, V3, R4) qui utilisent déjà :
+            ("svd_singular_values", tuple(A.shape), str(A.dtype))
+        Économie : ~9 Properties × 1 SVD = 1 SVD réelle par régime/layer.
+        """
+        import torch  # noqa: PLC0415
+        cache_key = self.cache_key("svd_singular_values", tuple(A.shape), str(A.dtype))
+        if cache_key not in self.cache:
+            A_work = A.to(device=self.device, dtype=self.dtype)
+            self.cache[cache_key] = torch.linalg.svdvals(A_work)
+        return self.cache[cache_key]
+
 
 class Property(ABC):
     """Une mesure mathématique sur une matrice d'attention.
