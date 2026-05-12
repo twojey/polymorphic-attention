@@ -140,7 +140,14 @@ class Battery:
                         "omega": regime.omega, "delta": regime.delta,
                         "entropy": regime.entropy,
                     }},
-                    metadata={"oracle_id": oracle.oracle_id},
+                    metadata={
+                        "oracle_id": oracle.oracle_id,
+                        "tokens": dump.tokens,
+                        "query_pos": dump.query_pos,
+                        "omegas": dump.omegas,
+                        "deltas": dump.deltas,
+                        "entropies": dump.entropies,
+                    },
                 )
                 for prop in per_regime_props:
                     try:
