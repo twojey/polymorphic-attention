@@ -387,7 +387,7 @@ def _log_bucket_metrics(
     seq_len: int,
     hankel_tau: float,
     max_examples_metrics: int = 32,
-    skip_seq_len_above: int = 500,
+    skip_seq_len_above: int = 250,
 ) -> None:
     """Agrégats Hankel rank + entropie spectrale par couche (tous régimes confondus).
 
