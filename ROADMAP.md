@@ -53,17 +53,7 @@ Décisions cadres prises (Sprint 1) :
 
 0.2 (famille Backbone) a été retirée — le Backbone est dérivé en phase 3, pas pré-sélectionné. Le 0.2 actuel concerne la disponibilité des primitives mathématiques (`OPS/scripts/validate_primitives.py` prêt, 6 checks CPU passent, à ré-exécuter sur 5090).
 
-**Documents canoniques** :
-- `DOC/00_vision.md` — thèse, scope, principe Discovery > Reproduction, Oracle borne sup
-- `DOC/01_phase_metrologie.md` — Oracle quality gates, multi-Oracle, limites SSG axes
-- `DOC/01b_phase_calibration_signal.md` — 3 signaux candidats (S_KL, S_Grad, S_Spectral)
-- `DOC/02_phase_audit_spectral.md` — SCH comme distribution, batterie de tests structurels (vivante)
-- `DOC/03_phase_kernel_asp.md` — Backbone dérivé, Matriochka output-based, Loss Consistency
-- `DOC/04_phase_routage_budget.md` — Spectromètre, Curriculum, distillation 4a/4b avec percentile p75 + loss asymétrique
-- `DOC/05_phase_pareto.md` — 5 tests phase 5 + R_max/2 (6c) + différentiel (5a.ii) + comparateurs domain-aware
-- `DOC/falsifiabilite.md` — 13 règles d'application, hiérarchie des risques
-- `DOC/glossaire.md` — terminologie V3.5 canonique
-- `DOC/reports/{phase1,phase1b,phase2,phase3,phase4,phase5}_template.md` — squelettes rapports
+**Entrée documentation unique** : [`DOC/INTRODUCTION.md`](DOC/INTRODUCTION.md) (consolidation 2026-05-12 : 15 fichiers → 11)
 
 **Drivers Hydra prêts** :
 - `phase1_metrologie.run` — Oracle SMNIST + extraction + métriques (Sprint 1)
