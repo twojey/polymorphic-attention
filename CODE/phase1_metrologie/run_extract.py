@@ -386,6 +386,7 @@ def _log_bucket_metrics(
     *,
     seq_len: int,
     hankel_tau: float,
+    max_examples_metrics: int = 32,
 ) -> None:
     """Agrégats Hankel rank + entropie spectrale par couche (tous régimes confondus).
 
@@ -396,6 +397,15 @@ def _log_bucket_metrics(
     évite de polluer MLflow avec O(L × n_régimes) métriques par bucket et
     centralise l'analyse régime dans un script séparé.
 
+    Sous-échantillonnage : `hankel_rank_of_attention` a une boucle Python
+    double (B × N) appelant SVD pour chaque ligne. Pour le bucket seq=87
+    avec ~5000 ex, ça représente ~3.6M SVDs → minutes par couche. Comme
+    on ne loggue qu'une moyenne globale pour monitoring, on subsample à
+    `max_examples_metrics` (défaut 32) exemples — la moyenne reste
+    représentative avec un IC large mais suffisant pour suivre la
+    progression. Le calcul exact reste possible en post-processing sur
+    le dump complet.
+
     Tout échec sur une couche est reporté à stderr avec traceback (jamais
     silencieux) mais ne stoppe pas l'extraction — les dumps complets sont
     déjà sur disque.
@@ -403,9 +413,17 @@ def _log_bucket_metrics(
     attn: list[torch.Tensor] = dump["attn"]  # type: ignore[assignment]
 
     for ell, A in enumerate(attn):  # A : (B, H, N, N)
+        # Sous-échantillonnage déterministe (seed = ell + seq_len pour stabilité)
+        B = A.size(0)
+        if B > max_examples_metrics:
+            g = torch.Generator().manual_seed(ell * 10007 + seq_len)
+            idx = torch.randperm(B, generator=g)[:max_examples_metrics]
+            A_sub = A[idx]
+        else:
+            A_sub = A
         try:
-            hk_mean = float(hankel_rank_numerical(A, tau=hankel_tau).item())
-            se_mean = float(spectral_entropy(A).mean().item())
+            hk_mean = float(hankel_rank_numerical(A_sub, tau=hankel_tau).item())
+            se_mean = float(spectral_entropy(A_sub).mean().item())
         except Exception as exc:  # noqa: BLE001
             _stderr(
                 f"[bucket_metrics] couche {ell} seq={seq_len} : "

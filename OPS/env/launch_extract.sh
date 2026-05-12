@@ -119,7 +119,7 @@ cd "$ASP_REPO_ROOT"
 PYTHON_CMD=(
     uv run python -u -m phase1_metrologie.run_extract
     --config-path=../../OPS/configs/phase1 --config-name=oracle_smnist
-    "oracle_checkpoint=$CHECKPOINT_PATH"
+    "+oracle_checkpoint=$CHECKPOINT_PATH"
     "extraction.output_dir=$OUTPUT_DIR"
     "${HYDRA_OVERRIDES[@]}"
 )

@@ -3,7 +3,7 @@
 
 defaults:
   - _self_
-  - thresholds_phase2: thresholds_phase2
+  - thresholds_phase2@thresholds_phase2
 
 domain: smnist
 sprint: 2
