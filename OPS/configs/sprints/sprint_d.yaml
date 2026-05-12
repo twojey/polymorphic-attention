@@ -1,0 +1,22 @@
+# Sprint D — phase 3 V3+ avec Backbone informé.
+# Usage : python -m sprints.run --sprint D [overrides...]
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: D_phase3_v3
+
+# Source : rapport Sprint C
+sprint_c_report: DOC/reports/sprints/sprint_c.md
+backbone_class_override: null  # ex: "butterfly" pour bypass parse
+
+# Training
+training:
+  n_epochs: 50
+  batch_size: 64
+  learning_rate: 1e-3
+  oracle_baseline_acc: 0.645
+  target_acc_ratio: 0.90
+
+device: cuda  # GPU pod requis

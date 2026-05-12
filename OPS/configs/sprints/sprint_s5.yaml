@@ -1,0 +1,19 @@
+# Sprint S5 — Vision Oracle (DINOv2-base ou MinimalViT local).
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: S5_vision
+
+backend:
+  use_hf_dinov2: true
+  hf_model_name: facebook/dinov2-base
+  local_checkpoint: null
+  dataset: imagenet_val_sample
+
+battery:
+  level: research
+  n_examples_per_regime: 64
+
+device: cuda

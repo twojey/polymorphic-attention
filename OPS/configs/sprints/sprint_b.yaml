@@ -1,0 +1,20 @@
+# Sprint B — re-extraction phase 1 V2 dumps SMNIST.
+# Usage : python -m sprints.run --sprint B [overrides...]
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: B_re_extract
+
+# Oracle SMNIST (checkpoint requis)
+oracle:
+  kind: smnist
+  checkpoint: OPS/checkpoints/oracle_e2f0b5e.ckpt  # à pointer vers le bon ckpt
+  device: cpu  # CPU suffit pour extraction
+
+# Sweep régimes (DOC/01 §sweep V1)
+sweep:
+  omegas: [0, 2, 4]
+  deltas: [16, 64, 256]
+  n_examples_per_regime: 512  # = audit_svd phase 1

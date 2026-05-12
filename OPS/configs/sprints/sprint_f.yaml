@@ -1,0 +1,14 @@
+# Sprint F — phase 4b autonomous routing.
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: F_phase4_autonomous
+
+sprint_e_checkpoint: OPS/checkpoints/sprints/E_phase4_warmup/last.ckpt
+
+training:
+  n_epochs: 50
+
+device: cuda

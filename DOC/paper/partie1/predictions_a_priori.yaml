@@ -1,0 +1,102 @@
+# Prédictions a priori — Partie 1
+#
+# Format YAML : liste de dicts évalués par livrables.partie1_predictions_vs_measured.
+# Pre-enregistré 2026-05-11 ~11:00 UTC, révisé 2026-05-12.
+#
+# Format de chaque entrée :
+#   prop_metric: "<property_name>.<metric_key>"
+#   oracle: "<OR|LL|SC|DV|CL|ES>"
+#   prediction: "low" | "medium" | "high" | <numeric value>
+#   threshold_low: <float>   # si prediction == "low": observed < threshold_low ⇒ validé
+#   threshold_high: <float>  # si prediction == "high": observed > threshold_high ⇒ validé
+#   tolerance: 0.10  # si prediction numérique : |obs - pred| / |pred| ≤ tolérance
+#   note: "..."
+
+# === Famille A — Spectral ===
+
+- prop_metric: A1_r_eff_theta099.r_eff_median
+  oracle: DV
+  prediction: low
+  threshold_low: 6.0
+  note: "DINOv2 attendu le plus low-rank (patches voisins corrélés)"
+
+- prop_metric: A1_r_eff_theta099.r_eff_median
+  oracle: SC
+  prediction: high
+  threshold_high: 12.0
+  note: "StarCoder attendu le plus high-rank (logique précise)"
+
+- prop_metric: A1_r_eff_theta099.r_eff_median
+  oracle: LL
+  prediction: low
+  threshold_low: 8.0
+
+- prop_metric: A4_spectral_entropy.spectral_entropy_norm_median
+  oracle: DV
+  prediction: low
+  threshold_low: 0.4
+  note: "Concentré spectral attendu"
+
+# === Famille B — Structurel ===
+
+- prop_metric: B1_toeplitz_distance.toeplitz_distance_relative_median
+  oracle: OR
+  prediction: high
+  threshold_high: 0.30
+  note: "Pas de Toeplitz pur attendu (data-dépendance)"
+
+- prop_metric: B5_block_diagonal_distance.block_diag_relative_distance_median
+  oracle: DV
+  prediction: low
+  threshold_low: 0.15
+  note: "Block-diag fort attendu pour patches"
+
+- prop_metric: B4_sparse_fraction.sparse_fraction_median
+  oracle: SC
+  prediction: high
+  threshold_high: 0.50
+  note: "Code = sparse"
+
+- prop_metric: B6_banded_distance.rel_distance_median
+  oracle: ES
+  prediction: low
+  threshold_low: 0.20
+  note: "Protéines = interactions locales (banded)"
+
+# === Famille G — Algébrique ===
+
+- prop_metric: G2_symmetry.is_symmetric_fraction
+  oracle: OR
+  prediction: low
+  threshold_low: 0.01
+  note: "Stochastique row-wise ⇒ non symétrique"
+
+# === Famille O — Déplacement ===
+
+- prop_metric: O1_toeplitz_displacement_rank.fraction_rank_le_2_strict
+  oracle: OR
+  prediction: low
+  threshold_low: 0.10
+  note: "Pas de Toeplitz strict attendu (rang > 2)"
+
+# === Famille R — RKHS ===
+
+- prop_metric: R1_mercer_psd.fraction_psd
+  oracle: OR
+  prediction: low
+  threshold_low: 0.10
+  note: "Attentions causales ⇒ pas PSD"
+
+- prop_metric: R3_bochner_stationarity.fraction_pass_bochner
+  oracle: OR
+  prediction: low
+  threshold_low: 0.10
+  note: "Pas stationnaire (data-dépendance)"
+
+# === Famille U — Sparse-structured ===
+
+- prop_metric: U2_monarch_distance.epsilon_monarch_median
+  oracle: DV
+  prediction: low
+  threshold_low: 0.25
+  note: "Si DINOv2 est H-matrix, Monarch devrait l'approcher"

@@ -1,0 +1,19 @@
+# Sprint C — Battery level_research × dumps Sprint B.
+# Usage : python -m sprints.run --sprint C [overrides...]
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: C_catalog_full
+
+# Source dumps
+dumps_dir: OPS/logs/sprints/B_re_extract/dumps
+
+# Battery
+battery:
+  level: research
+  n_examples_per_regime: 32  # cap pour rester sous quelques heures
+
+# Device (CPU OK pour Battery sur dumps)
+device: cpu

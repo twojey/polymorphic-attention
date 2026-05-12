@@ -1,0 +1,14 @@
+# Sprint G — phase 5 validation 5a-6c.
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: G_phase5_validation
+
+sprint_f_checkpoint: OPS/checkpoints/sprints/F_phase4_autonomous/last.ckpt
+
+tests:
+  to_run: ["5a", "5b", "5c", "5d", "5e", "6c"]
+
+device: cuda

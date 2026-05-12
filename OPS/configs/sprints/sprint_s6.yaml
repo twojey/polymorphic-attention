@@ -1,0 +1,21 @@
+# Sprint S6 — Code Oracle (StarCoder-2-3B ou MinimalCode local).
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: S6_code
+
+backend:
+  use_hf_starcoder: false  # MinimalCode + Dyck-k par défaut
+  hf_model_name: bigcode/starcoder2-3b
+  local_checkpoint: null
+
+oracle:
+  n_bracket_types: 4
+
+battery:
+  level: research
+  n_examples_per_regime: 64
+
+device: cuda

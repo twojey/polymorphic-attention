@@ -1,0 +1,15 @@
+# Sprint E — phase 4a warm-up Spectromètre.
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: E_phase4_warmup
+
+sprint_d_checkpoint: OPS/checkpoints/sprints/D_phase3_v3/last.ckpt
+
+training:
+  n_epochs: 30
+  lambda_spec: 1.0  # poids loss Spectromètre
+
+device: cuda

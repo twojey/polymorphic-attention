@@ -1,0 +1,23 @@
+# Base config Sprint — valeurs partagées par tous les Sprints.
+# Spec : DOC/sprints/ + CODE/sprints/.
+
+defaults:
+  - _self_
+
+# Sprint generic
+sprint:
+  seed: 0
+  device: cpu  # cpu | cuda
+  output_dir: OPS/logs/sprints  # racine, le runner crée <output_dir>/<sprint_id>/
+  checkpoint_dir: OPS/checkpoints/sprints
+  mlflow_uri: null  # null = pas de logging MLflow
+
+# Battery params (utilisés par Sprint C, S4-S7)
+battery:
+  level: research  # minimal | principal | extended | full | research
+  n_examples_per_regime: 32
+
+# Robustness
+robustness:
+  retries_per_regime: 2
+  raise_on_oracle_failure: false  # skip régime si Oracle plante

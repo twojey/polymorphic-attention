@@ -1,0 +1,15 @@
+# Sprint S4 — SMNIST seq_len étendu 1024-4096.
+
+defaults:
+  - base
+  - _self_
+
+sprint_id: S4_smnist_extended
+
+oracle:
+  checkpoint: OPS/checkpoints/oracle_e2f0b5e.ckpt
+
+sweep:
+  deltas_extended: [1024, 2048, 4096]
+  omegas: [0, 2, 4]
+  n_examples_per_regime: 128
