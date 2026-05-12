@@ -79,6 +79,10 @@ training:
   grad_clip: 1.0
   log_interval_steps: 20
   precision: bf16-mixed
+  # Cap robustesse : nombre max de batches qu'on tolère de skip dans une
+  # epoch (chacun a déjà 1 retry OOM avec empty_cache). Au-delà → raise
+  # (probable dataset corrompu ou CUDA persistant cassé).
+  max_batch_skips_per_epoch: 5
 
 # --- Losses ---
 loss:

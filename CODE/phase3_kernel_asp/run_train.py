@@ -413,54 +413,96 @@ def main(cfg: DictConfig) -> None:
                     f"Restart from epoch 0."
                 )
                 traceback.print_exc(file=sys.stderr, limit=3)
+        # Retry caps : si > max_batch_skips dans une epoch, on raise.
+        # Si OOM CUDA, on retente une fois après empty_cache.
+        max_batch_skips_per_epoch = int(
+            OmegaConf.select(cfg, "training.max_batch_skips_per_epoch") or 5
+        )
         for epoch in range(start_epoch, n_epochs):
             asp.train()
             t_epoch = time.perf_counter()
-            for batch in train_loader:
-                tokens = batch["tokens"].to(device)
-                targets = batch["targets"].to(device)
-                qpos = find_query_positions(tokens, vocab.QUERY)
+            n_batch_skipped = 0
+            for batch_idx, batch in enumerate(train_loader):
+                # Retry loop pour chaque batch (1 OOM-retry après empty_cache)
+                for attempt in (0, 1):
+                    try:
+                        tokens = batch["tokens"].to(device)
+                        targets = batch["targets"].to(device)
+                        qpos = find_query_positions(tokens, vocab.QUERY)
 
-                # L_task : forward rang plein
-                logits_full = asp(tokens, qpos)
-                l_task = task_loss_fn(logits_full, targets)
+                        # L_task : forward rang plein
+                        logits_full = asp(tokens, qpos)
+                        l_task = task_loss_fn(logits_full, targets)
 
-                # L_matriochka : sample ranks + sum
-                ranks = matriochka_rank_schedule(
-                    R_max,
-                    n_samples=int(cfg.loss.matriochka.n_rank_samples),
-                    seed=step,
-                )
-                weights = matriochka_weights(
-                    ranks, strategy=cfg.loss.matriochka.weight_strategy,
-                )
-                def _forward_rank(_x, r):
-                    return asp.forward_at_rank(_x, qpos, r)
-                # Note : _forward_rank reçoit tokens, pas embeddings
-                l_M = loss_matriochka(
-                    asp_layer_forward=_forward_rank,
-                    x=tokens, y_target=targets,
-                    task_loss=task_loss_fn, ranks=ranks, weights=weights,
-                )
+                        # L_matriochka : sample ranks + sum
+                        ranks = matriochka_rank_schedule(
+                            R_max,
+                            n_samples=int(cfg.loss.matriochka.n_rank_samples),
+                            seed=step,
+                        )
+                        weights = matriochka_weights(
+                            ranks, strategy=cfg.loss.matriochka.weight_strategy,
+                        )
+                        def _forward_rank(_x, r):
+                            return asp.forward_at_rank(_x, qpos, r)
+                        l_M = loss_matriochka(
+                            asp_layer_forward=_forward_rank,
+                            x=tokens, y_target=targets,
+                            task_loss=task_loss_fn, ranks=ranks, weights=weights,
+                        )
+                        l_C = loss_consistency(
+                            asp_layer_forward=_forward_rank,
+                            x=tokens, R_max=R_max,
+                            n_samples=int(cfg.loss.consistency.n_samples),
+                            delta=int(cfg.loss.consistency.delta),
+                            seed=step + 1,
+                        )
+                        loss = l_task + lam_M * l_M + lam_C * l_C
 
-                # L_consistency
-                l_C = loss_consistency(
-                    asp_layer_forward=_forward_rank,
-                    x=tokens, R_max=R_max,
-                    n_samples=int(cfg.loss.consistency.n_samples),
-                    delta=int(cfg.loss.consistency.delta),
-                    seed=step + 1,
-                )
+                        opt.zero_grad()
+                        loss.backward()
+                        if cfg.training.grad_clip:
+                            torch.nn.utils.clip_grad_norm_(asp.parameters(), float(cfg.training.grad_clip))
+                        opt.step()
+                        break  # succès, on quitte le retry loop
+                    except torch.cuda.OutOfMemoryError as exc:
+                        _stderr(
+                            f"[train] batch {batch_idx} attempt {attempt}: OOM CUDA "
+                            f"({exc}). torch.cuda.empty_cache() + retry."
+                        )
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                        gc.collect()
+                        if attempt == 1:
+                            _stderr(
+                                f"[train] batch {batch_idx}: OOM persiste après retry, "
+                                f"SKIP ce batch (compteur n_batch_skipped={n_batch_skipped+1})"
+                            )
+                            n_batch_skipped += 1
+                    except Exception as exc:  # noqa: BLE001
+                        _stderr(
+                            f"[train] batch {batch_idx} attempt {attempt}: "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        traceback.print_exc(file=sys.stderr, limit=5)
+                        if attempt == 1:
+                            _stderr(
+                                f"[train] SKIP batch {batch_idx} (compteur n_batch_skipped={n_batch_skipped+1})"
+                            )
+                            n_batch_skipped += 1
+                else:
+                    # Boucle for-else : exécuté si pas break → 2 tentatives échouées
+                    pass
 
-                loss = l_task + lam_M * l_M + lam_C * l_C
+                # Hard limit : si trop de skips, on lève une exception (= dataset corrompu)
+                if n_batch_skipped > max_batch_skips_per_epoch:
+                    raise RuntimeError(
+                        f"[train] {n_batch_skipped} batches skipped en epoch {epoch} "
+                        f"(seuil {max_batch_skips_per_epoch}). Probable corruption dataset "
+                        f"ou problème CUDA persistant. Arrêt brutal."
+                    )
 
-                opt.zero_grad()
-                loss.backward()
-                if cfg.training.grad_clip:
-                    torch.nn.utils.clip_grad_norm_(asp.parameters(), float(cfg.training.grad_clip))
-                opt.step()
-
-                if step % log_interval == 0:
+                if step % log_interval == 0 and "loss" in locals():
                     _safe_mlflow("log_metric loss", mlflow.log_metric, "loss", float(loss.item()), step=step)
                     _safe_mlflow("log_metric l_task", mlflow.log_metric, "l_task", float(l_task.item()), step=step)
                     _safe_mlflow("log_metric l_matriochka", mlflow.log_metric, "l_matriochka", float(l_M.item()), step=step)
@@ -472,9 +514,25 @@ def main(cfg: DictConfig) -> None:
                     )
                 step += 1
 
-            # Eval val
+            if n_batch_skipped > 0:
+                _stderr(f"[train] epoch {epoch} : {n_batch_skipped} batches skipped (tolérés)")
+                _safe_mlflow(
+                    "log_metric batches_skipped",
+                    mlflow.log_metric,
+                    "batches_skipped", n_batch_skipped, step=step,
+                )
+
+            # Eval val avec try/except → si crash, val_acc=0 + warning, on continue
             asp.eval()
-            val_acc = _eval_asp_acc(asp, val_loader, vocab.QUERY, device)
+            try:
+                val_acc = _eval_asp_acc(asp, val_loader, vocab.QUERY, device)
+            except Exception as exc:  # noqa: BLE001
+                _stderr(
+                    f"[eval] échec à epoch {epoch} : {type(exc).__name__}: {exc}. "
+                    f"val_acc = 0.0 par défaut."
+                )
+                traceback.print_exc(file=sys.stderr, limit=3)
+                val_acc = 0.0
             _safe_mlflow("log_metric val_acc", mlflow.log_metric, "val_acc", val_acc, step=step)
             elapsed = time.perf_counter() - t_epoch
             print(
@@ -482,6 +540,11 @@ def main(cfg: DictConfig) -> None:
                 f"(oracle={oracle_acc:.4f}) durée {elapsed:.1f}s ===",
                 flush=True,
             )
+
+            # Libère VRAM entre epochs (anti OOM par accumulation)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
             improved = val_acc > best_val_acc
             best_val_acc = max(best_val_acc, val_acc)
 
