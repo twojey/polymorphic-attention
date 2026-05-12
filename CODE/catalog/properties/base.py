@@ -21,7 +21,14 @@ from typing import Any, Callable, Literal
 import torch
 
 
-PropertyScope = Literal["per_regime", "cross_regime"]
+PropertyScope = Literal["per_regime", "per_regime_layers", "cross_regime"]
+"""
+- "per_regime" : A = Tensor (B, H, N, N) pour UN régime, UNE couche. Le défaut.
+- "per_regime_layers" : A = list[Tensor] toutes les couches d'UN régime
+                        (vue cross-layer dans un régime, ex famille H).
+- "cross_regime" : A = dict {regime_key → AttentionDump} toutes les
+                   attentions collectées (ex universalité).
+"""
 
 
 @dataclass

@@ -111,10 +111,13 @@ class Battery:
         })
 
         per_regime_props = [p for p in self.properties if p.scope == "per_regime"]
+        per_regime_layers_props = [
+            p for p in self.properties if p.scope == "per_regime_layers"
+        ]
         cross_regime_props = [p for p in self.properties if p.scope == "cross_regime"]
         all_dumps: dict[tuple, AttentionDump] = {}
 
-        # --- Per-regime properties ---
+        # --- Per-regime properties (per_regime + per_regime_layers) ---
         for regime in regimes:
             try:
                 dump = oracle.extract_regime(regime, n_examples_per_regime)
@@ -131,8 +134,6 @@ class Battery:
             all_dumps[regime.key] = dump
             regime_out: dict[str, dict] = {}
             for ell, A in enumerate(dump.attn):
-                # On itère sur les couches : chaque Property s'applique à
-                # chaque couche, on agrège ensuite par layer en suffixe nom
                 ctx = PropertyContext(
                     device=self.device, dtype=self.dtype,
                     regime={"layer": ell, **{
@@ -152,9 +153,31 @@ class Battery:
                         )
                         traceback.print_exc(file=sys.stderr, limit=3)
                         continue
-                    # On préfixe les clés par layer pour traçabilité
                     layered_out = {f"layer{ell}_{k}": v for k, v in out.items()}
                     regime_out.setdefault(prop.name, {}).update(layered_out)
+
+            # Properties cross-layer pour ce régime : reçoivent list[Tensor]
+            if per_regime_layers_props:
+                ctx_layers = PropertyContext(
+                    device=self.device, dtype=self.dtype,
+                    regime={
+                        "omega": regime.omega, "delta": regime.delta,
+                        "entropy": regime.entropy, "n_layers": len(dump.attn),
+                    },
+                    metadata={"oracle_id": oracle.oracle_id},
+                )
+                for prop in per_regime_layers_props:
+                    try:
+                        out = prop.compute(dump.attn, ctx_layers)
+                    except Exception as exc:  # noqa: BLE001
+                        print(
+                            f"[battery] {prop.name} (cross-layer) échec sur régime "
+                            f"{regime.key} : {type(exc).__name__}: {exc}",
+                            file=sys.stderr, flush=True,
+                        )
+                        traceback.print_exc(file=sys.stderr, limit=3)
+                        continue
+                    regime_out[prop.name] = out
 
             results.per_regime[regime.key] = regime_out
 
