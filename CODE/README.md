@@ -1,29 +1,80 @@
-# CODE — Implémentation par phase
+# CODE — Code source ASP
 
-Squelette par phase. Aucune implémentation au démarrage : la stack (PyTorch / JAX / autre) est arrêtée à la fin de la phase 1 et fixée ici par un fichier de conventions.
+Trois niveaux d'organisation :
+
+1. **Modules transverses** : `shared/`, `infra/`
+2. **Catalogue Partie 1** (prioritaire 2026-05-12) : `catalog/`
+3. **Orchestration** : `sprints/`, `livrables/`
+4. **Phases scientifiques** (Partie 2) : `phase{1, 1b, 2, 3, 4, 5}_*/`
 
 ## Arborescence
 
 ```
 CODE/
-├── phase1_metrologie/             # RCP via SSG : Oracle, rang Hankel, entropie spectrale sur (ω, Δ, ℋ)
-├── phase1b_calibration_signal/    # Identification Gate : 4 signaux candidats, sensibilité + immunité, distillabilité
-├── phase2_audit_spectral/         # Audit Spectral : SVD → r_eff, Stress-Rank Map, loi de transfert (SCH)
-├── phase3_kernel_asp/             # ASPLayer : Backbone + correction Matriochka + Loss Consistency, Soft-Mask
-├── phase4_routage_budget/         # Spectromètre : 4a (warm-up + distillation) → 4b (autonome), Diagramme de Phase
-└── phase5_pareto/                 # Validation : 5 tests (Identifiabilité, Élasticité, SE/HT, Pareto, OOD croisé)
+├── shared/                          # Primitives réutilisables (checkpoint, retry, logging, mlflow)
+├── infra/                           # MachineProfile (hardware abstraction)
+│
+├── catalog/                         # ⭐ Catalogue Partie 1 — 98 Properties / 23 familles
+│   ├── properties/                  # 98 Properties classées A-W + N
+│   ├── oracles/                     # 5 adapters : Synthetic, SMNIST, LL, Vision, Code
+│   ├── batteries/                   # Battery + levels (minimal → research) + n_workers parallel
+│   ├── projectors/                  # 8 projectors structurés
+│   ├── fast_solvers/                # Levinson, Cauchy, Sylvester (oracles validation O/Q/U)
+│   ├── run.py / report.py / cross_oracle.py / tests/
+│
+├── sprints/                         # ⭐ 10 orchestrateurs Sprint (B/C/D/E/F/G/S4-S7)
+│   ├── base.py                      # SprintBase + manifest + checkpoint/resume + logging
+│   ├── run.py                       # CLI : python -m sprints.run --sprint X
+│   └── sprint_*.py
+│
+├── livrables/                       # ⭐ Génération artefacts paper Partie 1 + 2
+│   ├── cross_oracle_synthesis.py    # Table Property × Oracle
+│   ├── partie1_predictions_vs_measured.py
+│   ├── partie1_signatures.py
+│   ├── partie2_asp_verdict.py
+│   ├── paper_figures.py             # Matplotlib heatmap/barplot/Pareto
+│   └── run_all.py                   # Orchestrateur 1-shot tous livrables Partie 1
+│
+├── phase1_metrologie/               # Phase 1 — Oracle SMNIST + extraction
+├── phase1b_calibration_signal/      # Phase 1.5 — Signaux S_KL/Grad/Spectral
+├── phase2_audit_spectral/           # Phase 2 — SVD + SCH dictionnaire
+├── phase3_kernel_asp/               # Phase 3 — ASPLayer entraînement
+├── phase4_routage_budget/           # Phase 4 — Spectromètre + curriculum
+└── phase5_pareto/                   # Phase 5 — tests validation 5a-6c
 ```
 
 Chaque sous-dossier contient un README qui décrit l'attendu de la phase et les entrées/sorties prévues.
 
-## Conventions (à compléter post-phase 1)
+## Conventions
 
-- Stack : *à fixer*
-- Versionnage des poids : *à fixer*
-- Format des matrices d'attention extraites : *à fixer*
-- Logging des expériences : *à fixer* (cf. `OPS/`)
-- Reproductibilité (seeds, hardware fingerprint) : *à fixer*
+- **Stack** : PyTorch ≥ 2.11+cu128, Lightning Fabric, Hydra, uv. Voir `OPS/env/STACK.md`.
+- **Tests** : `pytest CODE/`, **674 verts** + 1 skip OPENBLAS (fin session 2026-05-12)
+- **Logging** : `shared.logging_helpers.setup_logging` + MLflow self-hosted optionnel
+- **Checkpoint** : `shared.checkpoint.Checkpoint` atomic save+resume avec fingerprint
+- **Retry** : `shared.retry.retry` / `retry_call` (backoff exp + jitter)
+- **Format AttentionDump** : `(attn: list[Tensor (B, H, N, N)], omegas, deltas, entropies, tokens, query_pos, metadata)` cf. `catalog/oracles/base.py`
+- **Reproductibilité** : seeds Hydra + manifest auto SprintBase (git hash + dirty, torch, python, cuda)
 
 ## Règle d'ordre
 
-Pas de code dans `phaseK/` tant que la phase K-1 n'a pas passé son go-criterion documenté dans `DOC/falsifiabilite.md`.
+Phases scientifiques (1 → 5) : chaque phase dépend du verdict de la précédente (cf. `DOC/falsifiabilite.md`).
+
+Sprints (B → G) : orchestrent les phases avec contraintes go/no-go. Squelettes `sprint_*.py` peuvent tourner avec retry/checkpoint sans pod (`level=minimal` ou backend random init) — utile pour smoke tests.
+
+## Quick start
+
+```bash
+# Catalog sur Oracle synthétique (smoke test, 1.5s)
+PYTHONPATH=CODE uv run python -m catalog.run \
+    --oracle synthetic --level research --output /tmp/cat_smoke
+
+# Sprint B sur pod CPU (30 min)
+bash OPS/setup/launch_sprint.sh B --nohup --watch -- \
+    --oracle-checkpoint OPS/checkpoints/oracle_e2f0b5e.ckpt
+
+# Tous les livrables Partie 1 en une commande
+PYTHONPATH=CODE uv run python -m livrables.run_all \
+    --results <results.json>:<oracle_id> ... \
+    --predictions DOC/paper/partie1/predictions_a_priori.yaml \
+    --output DOC/paper/partie1/
+```

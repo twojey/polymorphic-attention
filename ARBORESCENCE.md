@@ -1,6 +1,6 @@
-# Arborescence du Projet : Attention Superlinéaire Polymorphe (ASP)
+# Arborescence du projet — Attention Superlinéaire Polymorphe (ASP)
 
-**Convention de base** : Arborescence racine figée en trois dossiers majuscules `CODE/`, `DOC/`, `OPS/`.
+**Convention de base** : arborescence racine figée en trois dossiers majuscules `CODE/`, `DOC/`, `OPS/`.
 
 ---
 
@@ -8,384 +8,341 @@
 
 ```
 polymorphic-attention/
-├── CODE/                    # Code source (Python)
-├── DOC/                     # Documentation (Markdown)
-├── OPS/                     # Configuration opérationnelle & scripts
-├── pyproject.toml           # Configuration UV + dépendances Python
-├── uv.lock                  # Lockfile dépendances
-├── ROADMAP.md               # Feuille de route du projet
+├── CODE/                    # Code source Python (catalog + sprints + livrables + 6 phases + infra)
+├── DOC/                     # Documentation Markdown (FR)
+├── OPS/                     # Configs Hydra + scripts shell + logs + checkpoints
+├── pyproject.toml           # uv + deps Python
+├── uv.lock                  # Lockfile déterministe
+├── ROADMAP.md               # État courant + prochaines actions
 ├── ARBORESCENCE.md          # Ce fichier
-└── [.git, .venv, .claude]   # Infrastructure (non-documentée)
+└── [.git, .venv, .claude]   # Infra (non-doc)
 ```
 
 ---
 
-## 📁 CODE/ — Code source (6 phases + infrastructure)
+## 📁 CODE/ — Code source
 
-Structure : une branche par phase du pipeline ASP, plus les modules partagés.
-
-### Structure générale
+### Vue d'ensemble
 
 ```
 CODE/
-├── shared/                  # Modules réutilisables
-├── infra/                   # Profils machine & infrastructure
-├── catalog/                 # Catalogue exhaustif de propriétés & oracles [PRIORITAIRE 2026-05-12]
-├── phase1_metrologie/       # Phase 1 : Métrologie & observations
-├── phase1b_calibration_signal/  # Phase 1B : Calibration du signal
-├── phase2_audit_spectral/   # Phase 2 : Audit spectral
-├── phase3_kernel_asp/       # Phase 3 : Kernel ASP (architecture)
-├── phase4_routage_budget/   # Phase 4 : Routage & gestion budget
-└── phase5_pareto/           # Phase 5 : Front de Pareto & tests d'évaluation
+├── shared/                  # Primitives réutilisables (cross-module)
+├── infra/                   # Machine profile / hardware detection
+├── catalog/                 # ⭐ Catalogue Partie 1 — 98 Properties / 23 familles
+├── sprints/                 # ⭐ Orchestrateurs Sprint (B/C/D/E/F/G/S4-S7)
+├── livrables/               # ⭐ Génération artefacts scientifiques (paper, tables)
+├── phase1_metrologie/       # Phase 1 — Oracle SMNIST + extraction
+├── phase1b_calibration_signal/  # Phase 1.5 — calibration signaux S_KL/Grad/Spectral
+├── phase2_audit_spectral/   # Phase 2 — SVD + SCH dictionnaire
+├── phase3_kernel_asp/       # Phase 3 — ASPLayer entraînement
+├── phase4_routage_budget/   # Phase 4 — Spectromètre + curriculum
+└── phase5_pareto/           # Phase 5 — tests validation 5a-6c
 ```
 
 ### `CODE/shared/` — Modules partagés
 
-Primitives réutilisables par tous les phases :
-
 ```
 shared/
-├── __init__.py
-├── checkpoint.py            # Sérialisation checkpoints (reprise après crash)
-├── logging_helpers.py        # Utilitaires de journalisation avec horodatage
-├── mlflow_helpers.py         # Intégration MLflow (logging artefacts)
-├── plotting.py               # Visualisations (matplotlib/plotly)
-├── aggregation.py            # Agrégation métriques cross-batteries
-├── runner.py                 # Runner générique pour phases
-└── tests/                    # Tests unitaires
+├── checkpoint.py            # Checkpoint atomique (save/load par key, fingerprint)
+├── retry.py                 # ⭐ @retry décorateur + retry_call (backoff exp + jitter)
+├── logging_helpers.py       # setup_logging UTC + log_exceptions + log_checkpoint
+├── mlflow_helpers.py        # MLflow log opt-in (graceful si URI absent)
+├── plotting.py              # Helpers matplotlib (heatmaps, courbes)
+├── aggregation.py           # Agrégation cross-batteries (V3.5 distributional)
+├── runner.py                # Runner générique phases
+└── tests/                   # tests unitaires
 ```
 
-**Responsabilité** : Zéro code métier, uniquement infrastructure réutilisable.
+**Responsabilité** : zéro code métier, infrastructure réutilisable cross-Oracle/cross-phase.
 
----
-
-### `CODE/infra/` — Infrastructure machine & profils
+### `CODE/infra/` — Hardware abstraction
 
 ```
 infra/
-├── __init__.py
-├── machine.py               # MachineProfile : spécifications CPU/GPU/RAM/VRAM
+├── machine.py               # MachineProfile : auto-détect GPU/CPU, dtype_svd
 └── tests/
 ```
 
-**Responsabilité** : Abstraction hardware (RunPod, VPS local, CPU-only).
-
----
-
-### `CODE/catalog/` — [PRIORITAIRE] Catalogue de propriétés & oracles
-
-Point d'entrée principal depuis le pivot stratégique 2026-05-12.
+### `CODE/catalog/` — Catalogue Partie 1 (LIVRABLE PRIORITAIRE)
 
 ```
 catalog/
-├── __init__.py
-├── run.py                   # CLI orchestrateur : lance batteries & oracles
-
-├── properties/              # 131 propriétés classifiées (DOC/00b)
-│   └── [propriétés du domaine ASP]
-
-├── oracles/                 # Oracles cross-Oracle (SMNIST → LL, etc.)
-│   ├── smnist_oracle.py     # Oracle SMNIST : classifieur sur SMNIST 28×28
-│   └── ...
-
-├── batteries/               # Batteries de tests (B1–B6)
-│   ├── b1_morphology.py     # B1 : Morphologie & géométrie
-│   ├── b2_concentration.py  # B2 : Concentration des normes
-│   ├── b3_separation.py     # B3 : Séparation classes
-│   ├── b4_robustness.py     # B4 : Robustesse adversariale
-│   ├── b5_block_diag.py     # B5 : Block-diagonalité (headwise)
-│   ├── b6_banded.py         # B6 : Propriétés Banded
-│   └── battery_orchestrator.py
-
-├── projectors/              # Projection multi-niveaux (layer, head, token)
-│   └── ...
-
-├── reports/                 # Génération rapports comparatifs
-│   └── ...
-
-└── tests/                   # Tests intégration & end-to-end
-    └── test_catalog_*.py
+├── run.py                   # CLI : python -m catalog.run --oracle X --level Y
+├── report.py                # Génération rapport Markdown
+├── cross_oracle.py          # Comparaison signatures cross-Oracle
+│
+├── properties/              # 98 Properties classifiées 23 familles (A-W + N)
+│   ├── base.py              # Property abstract + PropertyContext + scope Literal
+│   ├── registry.py          # PropertyRegistry singleton + @register_property
+│   ├── family_a_spectral/   # A1-A6 : r_eff, condition, entropy, decay, PR
+│   ├── family_b_structural/ # B0-B9 : identity, Toeplitz, Hankel, Cauchy, sparse, banded, etc.
+│   ├── family_c_token_stats/ # C1-C9 : KL, entropies, Fisher, Wasserstein, S_Grad
+│   ├── family_d_geometric/  # D1-D3 : cosine, distance, subspace angles
+│   ├── family_e_information/ # E1-E2 : mutual info, compressibility
+│   ├── family_f_dynamic/    # F1-F2 : Lipschitz, temporal stability
+│   ├── family_g_algebraic/  # G1-G8 : trace/det, symmetry, idempotence, charpoly, B-S, D-module, syzygies
+│   ├── family_h_cross_layer/ # H1-H4 : residual, composition, r_eff trajectory, convergence
+│   ├── family_i_cross_head/ # I1-I3 : diversity, specialization, clustering
+│   ├── family_j_markov/     # J1-J4 : convergence A^k, stationary, mixing, reversibility
+│   ├── family_k_graph/      # K1-K4 : Laplacian, persistent homology, PageRank, modularity
+│   ├── family_l_frequency/  # L1-L3 : FFT2D, wavelets, quasi-periodicity
+│   ├── family_m_conditional/ # M1-M2 : token type sensitivity, stress variation
+│   ├── family_n_comparative/ # N1-N3 : F-divergence, preservation, Lipschitz diff (Oracle/student)
+│   ├── family_o_displacement/ # O1-O5 : Toeplitz/Cauchy/Vandermonde rank, Kailath generators, Pan
+│   ├── family_p_realization/ # P1-P6 : Hankel realization, HSV, decay, min order, hier blocks, gramians
+│   ├── family_q_hierarchical/ # Q1-Q5 : H-matrix, HSS, nestedness, H-distribution
+│   ├── family_r_rkhs/       # R1-R4 : Mercer PSD, RFF, Bochner, truncated energy
+│   ├── family_s_tensors/    # S1-S3 : Tucker, Tensor Train, Hierarchical Tucker
+│   ├── family_t_equivariance/ # T1-T2 : permutation, subgroup
+│   ├── family_u_sparse_structured/ # U1-U5 : Butterfly, Monarch, Block-sparse, Pixelfly, Sparse+LR
+│   ├── family_v_operators/  # V1-V3 : pseudo-diff, CZ decay, compactness
+│   └── family_w_logic/      # W1-W3 : pattern complexity, dependence proxy, NIP/VC-shatter
+│
+├── oracles/                 # Adapters Oracle (interface AbstractOracle)
+│   ├── base.py              # AbstractOracle + AttentionDump + RegimeSpec
+│   ├── _minimal_transformer.py  # ⭐ MinimalTransformer GPT-style (fallback Oracles)
+│   ├── synthetic.py         # SyntheticOracle (génération random softmax)
+│   ├── smnist.py            # SMNISTOracle (phase 1 wrapper)
+│   ├── language.py          # ⭐ LLOracle + HFLanguageBackend + MinimalLMBackend + nested_parentheses
+│   ├── vision.py            # ⭐ VisionOracle + HFVisionBackend + MinimalViTBackend + PatchTokenizer
+│   └── code.py              # ⭐ CodeOracle + MinimalCodeBackend + Dyck-k parser/validator
+│
+├── batteries/               # Composition Property × Oracle → résultats
+│   ├── base.py              # Battery + BatteryResults (avec n_workers parallel dispatch)
+│   └── levels.py            # level_minimal/principal/extended/full/research
+│
+├── projectors/              # Structures matricielles paramétrées
+│   ├── base.py              # AbstractProjector
+│   ├── toeplitz.py          # ProjectorToeplitz
+│   ├── hankel.py            # ProjectorHankel
+│   ├── cauchy.py            # ProjectorCauchy
+│   ├── banded.py            # ProjectorBanded
+│   ├── block_diagonal.py    # ProjectorBlockDiagonal
+│   ├── butterfly.py         # ProjectorButterfly
+│   ├── monarch.py           # ProjectorMonarch
+│   └── pixelfly.py          # ProjectorPixelfly
+│
+├── fast_solvers/            # ⭐ Algorithmes rapides pour matrices structurées
+│   ├── levinson.py          # Levinson-Durbin Toeplitz solver (scipy backed)
+│   ├── cauchy.py            # Cauchy matrix multiply + solve (référence)
+│   ├── displacement.py      # Sylvester displacement + generators (Kailath)
+│   └── tests/
+│
+└── tests/                   # Tests intégration end-to-end catalog
 ```
 
-**Priorité** : Catalogue DOC/00b (131 propriétés) mappées dans le code, cross-Oracle (SMNIST→LL).
+### `CODE/sprints/` — ⭐ Orchestrateurs Sprint
 
-**État** : Batteries 1–6 implémentées, adapter déployé, CLI fonctionnel (depuis 2026-05-11).
+```
+sprints/
+├── base.py                  # SprintBase (abstract) + SprintResult + SprintStatus + manifest
+├── run.py                   # CLI dispatcher : python -m sprints.run --sprint B
+│
+├── sprint_b_re_extract.py   # Sprint B : re-extraction dumps phase 1 V2 (retry intégré)
+├── sprint_c_catalog_full.py # Sprint C : Battery research × dumps Sprint B
+├── sprint_d_phase3_v3.py    # Sprint D : phase 3 V3+ avec Backbone informé Sprint C
+├── sprint_e_phase4_warmup.py     # Sprint E : phase 4a warm-up Spectromètre
+├── sprint_f_phase4_autonomous.py # Sprint F : phase 4b autonomous routing
+├── sprint_g_phase5_validation.py # Sprint G : phase 5 tests 5a-6c (verdict ASP)
+├── sprint_s4_smnist_extended.py  # Sprint S4 : SMNIST seq_len 1024-4096
+├── sprint_s5_vision.py      # Sprint S5 : Vision Oracle (DINOv2 ou MinimalViT)
+├── sprint_s6_code.py        # Sprint S6 : Code Oracle (Dyck-k + StarCoder)
+├── sprint_s7_ll.py          # Sprint S7 : LL Oracle (Llama-3.2-1B + TinyStories)
+└── tests/                   # Sprint base + robustesse end-to-end
+```
 
----
+Garanties Sprint :
+- Checkpoint/resume atomique (FileNotFoundError si fingerprint mismatch)
+- Logging horodaté UTC vers `<output_dir>/sprint.log`
+- Manifest reproductible (git hash + dirty flag, torch, python, cuda)
+- MLflow logger opt-in
+- Critères go/no-go explicites (skip_if_failed=True déclenche SKIPPED)
+- Retry sur extract_regime (via shared/retry.py)
 
-### `CODE/phase1_metrologie/` — Phase 1 : Observations & métrologie
+### `CODE/livrables/` — ⭐ Génération artefacts scientifiques
 
-Extraction de signatures brutes depuis un modèle entraîné.
+```
+livrables/
+├── cross_oracle_synthesis.py     # Table cross-Oracle Property × Oracle + variance
+├── partie1_signatures.py         # Signatures textuelles per Oracle (15 heuristiques)
+├── partie1_predictions_vs_measured.py  # Confrontation paris a priori
+├── partie2_asp_verdict.py        # Verdict ASP GO/PARTIAL/NO-GO (5a + 5c + 6c mandatory)
+├── paper_figures.py              # Heatmap signatures + barplot predictions + Pareto
+├── run_all.py                    # ⭐ Orchestrateur 1-shot : tous livrables Partie 1
+└── tests/                        # 16 tests livrables
+```
+
+### `CODE/phase1_metrologie/` — Phase 1 (Oracle SMNIST)
 
 ```
 phase1_metrologie/
-├── __init__.py
-├── run.py                   # Runner : exécute métrologie phase 1
-├── run_extract.py           # Extraction de signatures brutes
-├── report.py                # Génération rapports phase 1
-├── sweeps.py                # Configurations hyperparamètres (Hydra)
-
-├── metrics/                 # Métriques & agrégation
-│   └── ...
-
-├── oracle/                  # Oracles phase 1 (si spécifiques)
-│   └── ...
-
-├── ssg/                     # Signature Stochastic Generator
-│   └── ...
-
-└── tests/                   # Tests phase 1
-    └── test_phase1_*.py
+├── run.py / run_extract.py      # Drivers Hydra
+├── report.py                    # Rapport phase 1
+├── sweeps.py                    # Configs sweep (ω, Δ, ℋ)
+├── metrics/, oracle/, ssg/      # Métriques + Oracle + Signature Stochastic Generator
+└── tests/
 ```
 
-**Responsabilité** : Mesurer & enregistrer métriques brutes depuis réseau forward.
-
----
-
-### `CODE/phase1b_calibration_signal/` — Phase 1B : Calibration du signal
-
-Validation que les signaux mesurés en phase 1 sont robustes & reproductibles.
+### `CODE/phase1b_calibration_signal/` — Phase 1.5
 
 ```
 phase1b_calibration_signal/
-├── __init__.py
-├── run.py                   # Runner : exécute calibration
-├── run_distillability.py    # Test distillabilité du signal
-
-├── signals/                 # Générateurs signaux
-│   └── ...
-
-├── bench/                   # Benchmarks robustesse
-│   └── ...
-
+├── run.py / run_distillability.py
+├── signals/                     # S_KL, S_Grad, S_Spectral
+├── bench/                       # Benchmarks robustesse
 └── tests/
-    └── test_calibration_*.py
 ```
 
-**Responsabilité** : Confirmer reproductibilité avant passage à phase 2.
-
----
-
-### `CODE/phase2_audit_spectral/` — Phase 2 : Audit spectral & décomposition
-
-Décomposer signatures en composantes spectrales indépendantes.
+### `CODE/phase2_audit_spectral/` — Phase 2
 
 ```
 phase2_audit_spectral/
-├── __init__.py
-├── run.py                   # Runner phase 2
-├── checkpoint.py            # Sérialisation états intermédiaires
-
-├── svd_pipeline.py          # Pipeline SVD/décomposition
-├── head_specialization.py   # Analyse spécialisation par head
-├── signal_decoupling.py     # Découplage signaux indépendants
-├── stress_rank_map.py       # Mapping stress → rang matriciel
-├── transfer_law.py          # Lois transfert entre architectures
-
-├── batteries/               # Batteries spécifiques phase 2
-│   └── ...
-
+├── run.py
+├── svd_pipeline.py              # SVD batched FP64
+├── head_specialization.py
+├── signal_decoupling.py
+├── stress_rank_map.py           # SRM V3.5
+├── transfer_law.py              # Loi r ~ ω^α · Δ^β
+├── batteries/
 └── tests/
-    └── test_phase2_*.py
 ```
 
-**Responsabilité** : Décomposer & analyser structure spectrale, valider hypothèses transfert.
-
----
-
-### `CODE/phase3_kernel_asp/` — Phase 3 : Kernel ASP (architecture)
-
-Implémentation mécanisme ASP core : allocation dynamique capacité par head/token.
+### `CODE/phase3_kernel_asp/` — Phase 3
 
 ```
 phase3_kernel_asp/
-├── __init__.py
-├── run_train.py             # Runner entraînement phase 3
-├── checkpoint.py            # Checkpoints entraînement
-
-├── asp_layer.py             # Couche ASP core
-├── backbone.py              # Interface backbone générique
-├── backbone_concrete.py     # Implémentations concrètes (Attention polymorphe, etc.)
-├── transformer.py           # Wrapper Transformer avec backbone ASP
-├── losses.py                # Fonctions loss (ASP-spécifiques)
-
-├── matriochka.py            # Nested representations (multi-scale)
-├── smart_init.py            # Initialisation intelligente poids
-├── soft_mask.py             # Masques progressifs (soft vs hard)
-├── sanity.py                # Tests sanité forward/backward
-
+├── run_train.py
+├── asp_layer.py                 # ASPLayer drop-in attention
+├── backbone.py / backbone_concrete.py
+├── transformer.py
+├── losses.py                    # Loss ASP-spécifiques
+├── matriochka.py                # Nested representations
+├── smart_init.py                # Init informée Sprint C
+├── soft_mask.py                 # Masque progressif
+├── sanity.py
 └── tests/
-    └── test_phase3_*.py
 ```
 
-**Responsabilité** : Implémentation architecture ASP & entraînement.
-
----
-
-### `CODE/phase4_routage_budget/` — Phase 4 : Routage & gestion budget
-
-Optimiser allocation capacité via curriculum & sparsity.
+### `CODE/phase4_routage_budget/` — Phase 4
 
 ```
 phase4_routage_budget/
-├── __init__.py
-├── curriculum.py            # Curriculum learning (progression difficulté)
-├── sparsity_loss.py          # Constraints sparsité activations
-├── distillation.py           # Distillation connaissances
-├── diagram_phase.py          # Diagrammes flow & bottlenecks
-├── spectrometer.py           # Analyse spectrale budgets
-
+├── run.py
+├── spectrometer.py              # Mini-réseau inférence r_target
+├── curriculum.py                # Curriculum warm-up → autonomous
+├── sparsity_loss.py / distillation.py / diagram_phase.py
 └── tests/
-    └── test_phase4_*.py
 ```
 
-**Responsabilité** : Optimiser allocation ressources & apprentissage.
-
----
-
-### `CODE/phase5_pareto/` — Phase 5 : Front de Pareto & validation
-
-Tests d'évaluation & caractérisation trade-offs.
+### `CODE/phase5_pareto/` — Phase 5
 
 ```
 phase5_pareto/
-├── __init__.py
-├── abstract.py              # Classe abstraite test
-├── pareto.py                # Calcul & visualisation front Pareto
-
-├── test_5a_identifiability.py    # Test 5A : Identifiabilité
-├── test_5b_elasticity.py         # Test 5B : Élasticité
-├── test_5c_se_ht.py              # Test 5C : Stabilité énergétique
-├── test_5e_ood.py                # Test 5E : Out-of-Distribution
-├── test_6c_rmax_half.py          # Test 6C : Capacité maximale
-
+├── run.py
+├── abstract.py / pareto.py
+├── test_5a_identifiability.py   # 5a
+├── test_5b_elasticity.py        # 5b
+├── test_5c_se_ht.py             # 5c
+├── test_5e_ood.py               # 5e
+├── test_6c_rmax_half.py         # 6c
 └── tests/
-    └── test_phase5_*.py
 ```
-
-**Responsabilité** : Valider hypothèses & caractériser front Pareto.
 
 ---
 
 ## 📚 DOC/ — Documentation (Markdown, français)
 
-Architecture : 
-- Fichiers numérotés : **00_** (pré-requis), **01–05** (phases)
-- **CONTEXT.md** : Langage de domaine actuel
-- **carnet_de_bord.md** : Journal chronologique (hypothèses, décisions, surprises)
-- **adr/** : Architecture Decision Records
-
 ```
 DOC/
-├── README.md                        # Introduction & guide lecture
-├── CONTEXT.md                       # Langage de domaine, variables clés
-├── glossaire.md                     # Définitions termes techniques
-├── falsifiabilite.md                # Méthodologie falsifiabilité-first
-
-├── 00_vision.md                     # Vue d'ensemble & motivation
-├── 00b_classification_proprietes.md # [PRIORITAIRE] Catalogue 131 propriétés
-├── 00c_predictions_signatures.md    # Prédictions signatures
-├── 00d_oracles_battery.md           # Oracles & batteries mappées
-├── 01_phase_metrologie.md           # Phase 1 : Métrologie
-├── 01b_phase_calibration_signal.md  # Phase 1B : Calibration signal
-├── 02_phase_audit_spectral.md       # Phase 2 : Audit spectral
-├── 03_phase_kernel_asp.md           # Phase 3 : Kernel ASP
-├── 04_phase_routage_budget.md       # Phase 4 : Routage budget
-├── 05_phase_pareto.md               # Phase 5 : Pareto
-
-├── carnet_de_bord.md                # [CRUCIAL] Journal projet (hypothèses, chronologie)
-
-├── adr/                             # Architecture Decision Records
-│   ├── 001_stack_tech.md            # Stack PyTorch + Fabric + Hydra + uv
-│   ├── 002_hardware.md              # Hardware RunPod RTX 5090 éphémère
-│   ├── 003_logging.md               # Logging MLflow self-hosted
-│   └── ...
-
-└── reports/                         # Rapports générés
-    ├── phase1_results.md
-    ├── phase2_results.md
-    └── ...
+├── INTRODUCTION.md              # Point d'entrée unique
+├── 00_FONDATIONS.md             # Thèse ASP + vocabulaire architectural/math
+├── CATALOGUE.md                 # ⭐ 131 propriétés × 23 catégories + Oracle selection + prédictions
+├── falsifiabilite.md            # Critères go/no-go par phase
+├── carnet_de_bord.md            # Journal chronologique
+│
+├── 01_phase_metrologie.md       # Phase 1 spec
+├── 01b_phase_calibration_signal.md  # Phase 1.5 spec
+├── 02_phase_audit_spectral.md   # Phase 2 spec
+├── 03_phase_kernel_asp.md       # Phase 3 spec
+├── 04_phase_routage_budget.md   # Phase 4 spec
+├── 05_phase_pareto.md           # Phase 5 spec
+│
+├── adr/                         # Architecture Decision Records
+│
+├── sprints/                     # ⭐ Sprints docs
+│   └── README.md                # Index 10 Sprints + lancement
+│
+├── reports/                     # Rapports phase + Sprint
+│   ├── README.md
+│   ├── phase{1,1b,2,3,4,5}_template.md
+│   ├── phase2.md                # Instancié
+│   └── sprints/                 # Templates rapports Sprint B-G + S4-S7
+│       ├── sprint_b_template.md
+│       ├── sprint_c_template.md
+│       ├── sprint_d_template.md
+│       ├── sprint_efg_template.md
+│       └── sprint_s4s7_template.md
+│
+└── paper/                       # ⭐ Outlines paper Partie 1 + 2
+    ├── README.md                # Guide auto-génération via livrables
+    ├── bibliography.bib         # BibTeX (Kailath, Hackbusch, Mercer, etc.)
+    ├── partie1/
+    │   ├── outline.md           # Plan paper "Mathematical Signatures"
+    │   ├── predictions_a_priori.yaml  # 15 paris pré-enregistrés
+    │   └── figures/
+    └── partie2/
+        ├── outline.md           # Plan paper "ASP Verdict"
+        └── figures/
 ```
-
-**Fichiers clés** :
-- `00b_classification_proprietes.md` : Catalogue exhaustif 131 propriétés (mappé en CODE/catalog)
-- `carnet_de_bord.md` : Source de vérité pour hypothèses & décisions chronologiques
 
 ---
 
-## ⚙️ OPS/ — Configuration & infrastructure opérationnelle
-
-Dossier de configuration, checkpoints, logs, secrets.
+## ⚙️ OPS/ — Configs + scripts + logs + checkpoints
 
 ```
 OPS/
-├── configs/                 # Configuration Hydra par phase
-│   ├── phase1/
-│   │   ├── default.yaml
-│   │   ├── smnist_oracle.yaml
-│   │   └── ...
-│   ├── phase1b/
-│   ├── phase2/
-│   ├── phase3/
-│   ├── phase4/
-│   └── phase5/
-
-├── scripts/                 # Scripts shell et Python
-│   ├── setup_pod.sh                    # Setup initial pod RunPod
-│   ├── setup_pod_cpu.sh                # Setup variante CPU-only
-│   ├── setup_env.sh                    # Setup environnement local
-│   ├── install_uv.sh                   # Installation UV
-│   ├── install_python_deps.sh          # Installation dépendances Python
-│   ├── blackwell_env.sh                # Configuration Blackwell GPU
-│   ├── start_mlflow_server.sh          # Démarrage serveur MLflow
-│   ├── start_mlflow_tunnel.sh          # Tunnel SSH pour MLflow
-│   ├── run_phase1b_skl.sh              # Runner scikit-learn phase 1B
-│   ├── monitor_run.sh                  # Monitoring exécution
-│   ├── verify_torch.sh                 # Vérification PyTorch
-│   ├── validate_primitives.py          # Validation primitives
-│   └── lib/                            # Librairie shell réutilisable
-│       └── common.sh
-
-├── env/                     # Fichiers environnement (secrets, clés API)
-│   ├── SETUP.md            # [LU EN PREMIER] Guide setup pod
-│   └── runpod_env.sh       # Variables d'environnement RunPod
-
-├── checkpoints/            # Checkpoints modèles
-│   ├── phase1/
-│   │   └── *.pt
-│   ├── phase2/
-│   │   └── *.pt
-│   ├── phase3/
-│   │   └── *.pt
-│   └── ...
-
-├── logs/                    # Logs exécution (persistent)
-│   ├── mlflow/             # MLflow artifacts
-│   │   ├── 0/              # Expérience 0
-│   │   │   ├── 1/          # Run 1
-│   │   │   │   ├── metrics/
-│   │   │   │   ├── params/
-│   │   │   │   └── artifacts/
-│   │   │   └── ...
-│   │   └── ...
-│   ├── pod_2026_05_12/     # Logs pod sesssion 2026-05-12
-│   │   ├── setup.log
-│   │   ├── phase1.log
-│   │   └── ...
-│   └── manifests/          # Manifests d'exécution
-│       └── phase1_manifest.json
-
-└── secrets/                 # Secrets (API keys, tokens)
-    ├── mlflow_token
-    ├── runpod_api_key
-    └── [.gitignored]
+├── configs/                     # Configs Hydra par phase + sprint + catalog
+│   ├── catalog/                 # base.yaml, smnist_*, cross_oracle.yaml
+│   ├── sprints/                 # ⭐ base.yaml + sprint_{b,c,d,e,f,g,s4,s5,s6,s7}.yaml
+│   ├── phase1/ … phase5/        # Configs Hydra par phase
+│   └── manifest_template.yaml   # Manifest run reproductibilité
+│
+├── env/                         # Env documentation (runtime)
+│   ├── HARDWARE.md              # VPS + pod, ENV vars Blackwell sm_120
+│   ├── STACK.md                 # PyTorch ≥ 2.11+cu128 + Fabric + Hydra + uv
+│   ├── LOGGING.md               # Conventions MLflow self-hosted
+│   └── PRIMITIVES.md            # Checklist primitives mathématiques GPU
+│
+├── setup/                       # Scripts de bootstrap (= "from zero to running")
+│   ├── README.md
+│   ├── SETUP.md                 # Pod RTX 5090 step-by-step
+│   ├── POD_CPU_SETUP.md         # Pod CPU pour phase 1.5
+│   ├── launch_extract.sh        # Phase 1 extract
+│   ├── launch_phase1b.sh        # Phase 1.5
+│   ├── launch_phase2.sh         # Phase 2
+│   ├── launch_phase3.sh         # Phase 3
+│   └── launch_sprint.sh         # ⭐ Sprint B-G + S4-S7 générique (nohup + watch)
+│
+├── scripts/                     # Scripts d'installation pure
+│   ├── setup_pod.sh / setup_pod_cpu.sh / setup_env.sh
+│   ├── install_uv.sh / install_python_deps.sh
+│   ├── blackwell_env.sh         # Variables Blackwell sm_120
+│   ├── verify_torch.sh / validate_primitives.py
+│   ├── start_mlflow_server.sh / start_mlflow_tunnel.sh
+│   ├── monitor_run.sh
+│   └── lib/common.sh            # Strict mode, traps ERR, asp::init_logging
+│
+├── checkpoints/                 # Checkpoints modèles + Sprint
+│   ├── oracle_e2f0b5e.ckpt      # Oracle SMNIST entraîné
+│   └── sprints/                 # Checkpoints atomique par Sprint
+│
+├── logs/                        # Logs persistent horodatés
+│   ├── mlflow/                  # MLflow artifacts
+│   ├── sprints/                 # ⭐ sprint_{ID}_{UTC}.log + output dirs
+│   └── manifests/               # Manifests JSON d'exécution
+│
+└── secrets/                     # API keys (.gitignored)
 ```
-
-**Structure clés** :
-- `OPS/setup/SETUP.md` : **À LIRE EN PREMIER** pour setup pod
-- `OPS/logs/` : Logs persistent avec horodatage (obligatoire robustesse scripts)
-- `OPS/configs/` : Configuration Hydra centralisée par phase
-- `OPS/scripts/` : Scripts modulaires (une responsabilité = un script)
 
 ---
 
@@ -393,56 +350,65 @@ OPS/
 
 ```
 polymorphic-attention/
-├── pyproject.toml           # Configuration UV + dépendances
-├── uv.lock                  # Lockfile (déterministe)
-├── ROADMAP.md               # Feuille de route détaillée (phases, jalons)
-├── ARBORESCENCE.md          # Ce fichier
-├── .gitignore               # Exclusions git
-├── CLAUDE.md                # [À créer] Documentation CLAUDE Code
-└── .claude/                 # Configuration Claude Code (local)
+├── pyproject.toml               # uv + deps
+├── uv.lock
+├── ROADMAP.md                   # État courant + prochaines actions
+├── ARBORESCENCE.md              # Ce fichier
+├── .gitignore
+└── .claude/                     # Config Claude Code (local)
 ```
 
 ---
 
-## 🔄 Convention arborescence - Immuabilité racine
+## 🔄 Convention arborescence — Immuabilité racine
 
 Les trois dossiers `CODE/`, `DOC/`, `OPS/` sont **figés** au niveau racine :
 
-- ✅ Ajouter modules *à l'intérieur* de `CODE/phase*/`
+- ✅ Ajouter modules *à l'intérieur* de `CODE/`
 - ✅ Ajouter documentation *à l'intérieur* de `DOC/`
 - ✅ Ajouter configs/scripts *à l'intérieur* de `OPS/`
 - ❌ Créer nouveaux dossiers au niveau racine
 - ❌ Déplacer CODE/DOC/OPS de la racine
 
-**Exception** : Fichiers de configuration racine (pyproject.toml, ROADMAP.md, etc.)
-
 ---
 
-## 🎯 État du projet (2026-05-12)
+## 🎯 État du projet (2026-05-12 fin session)
 
-| Phase | État | Notes |
-|-------|------|-------|
-| **Catalog** | ✅ Prioritaire | 131 propriétés, batteries 1–6, oracle adapter, CLI |
-| **Phase 1** | ✅ Complet | Métrologie, 119 tests |
-| **Phase 1B** | ✅ Complet | Calibration signal |
-| **Phase 2** | ✅ En cours | Audit spectral, décomposition |
-| **Phase 3** | 🔄 Dev | Kernel ASP, en attente pod RTX 5090 |
-| **Phase 4** | 📋 Planifié | Routage budget |
-| **Phase 5** | 📋 Planifié | Front Pareto |
+| Bloc | État | Notes |
+|---|---|---|
+| **Catalog Properties** | ✅ 98 / ~131 (75 %) | 23 familles A-W + N |
+| **Catalog Oracles** | ✅ 5 adapters | Synthetic, SMNIST, LL, Vision, Code (3 nouveaux squelettes complets) |
+| **Catalog Battery** | ✅ + parallel | n_workers > 1 dispatch ThreadPoolExecutor |
+| **Catalog Projectors** | ✅ 8 | Toeplitz, Hankel, Cauchy, Banded, Block-diag, Butterfly, Monarch, Pixelfly |
+| **Catalog Fast solvers** | ✅ 3 | Levinson, Cauchy, displacement (Kailath) |
+| **Sprint runners** | ✅ 10 | B, C, D, E, F, G, S4-S7 — squelettes ou complets selon disponibilité pod |
+| **Livrables** | ✅ 6 | cross-Oracle, predictions, signatures, verdict ASP, figures, run_all |
+| **Phase 1** | ✅ Complet | Oracle SMNIST entraîné |
+| **Phase 1.5** | ✅ Complet | 3 signaux calibrés |
+| **Phase 2** | ✅ Code complet | À lancer Sprint C sur dumps |
+| **Phase 3** | 🔄 Squelette | Sprint D = backbone informé Sprint C |
+| **Phase 4** | 🔄 Squelette | Sprints E + F |
+| **Phase 5** | 🔄 Squelette | Sprint G |
+| **Tests** | ✅ 674 verts | + 1 skip OPENBLAS |
+| **Doc** | ✅ Tous templates | + 2 outlines paper |
+| **Robustesse** | ✅ retry + logs + manifest | Pré-pod ready |
 
-**Blocker** : Attente accès pod RunPod RTX 5090 pour entraînement phases 3–5.
+**Bloqueur unique** : exécution réelle des Sprints B-G + S4-S7 sur pod RunPod RTX 5090 (~$50-100, ~2-4 mois wall-clock).
 
 ---
 
 ## 📖 Guide lecture documentation
 
-1. **Commencer par** : `DOC/README.md` → `DOC/CONTEXT.md`
-2. **Contexte scientifique** : `DOC/00_vision.md` → `DOC/falsifiabilite.md`
-3. **Catalogue** (prioritaire) : `DOC/00b_classification_proprietes.md`
-4. **Phases** : `DOC/01_phase_metrologie.md` → ... → `DOC/05_phase_pareto.md`
-5. **Chronologie & décisions** : `DOC/carnet_de_bord.md`
-6. **Patterns architecturaux** : `DOC/adr/`
+1. **Point d'entrée** : [`DOC/INTRODUCTION.md`](DOC/INTRODUCTION.md)
+2. **Thèse + vocabulaire** : [`DOC/00_FONDATIONS.md`](DOC/00_FONDATIONS.md)
+3. **Catalogue scientifique** : [`DOC/CATALOGUE.md`](DOC/CATALOGUE.md)
+4. **Critères falsifiabilité** : [`DOC/falsifiabilite.md`](DOC/falsifiabilite.md)
+5. **Phases (01-05)** : [`DOC/01_phase_metrologie.md`](DOC/01_phase_metrologie.md) → ... → [`DOC/05_phase_pareto.md`](DOC/05_phase_pareto.md)
+6. **Sprints orchestration** : [`DOC/sprints/README.md`](DOC/sprints/README.md)
+7. **Paper outlines** : [`DOC/paper/README.md`](DOC/paper/README.md)
+8. **Chronologie + décisions** : [`DOC/carnet_de_bord.md`](DOC/carnet_de_bord.md)
+9. **Setup pod** : [`OPS/setup/SETUP.md`](OPS/setup/SETUP.md)
 
 ---
 
-**Document généré** : 2026-05-12 | Pivot stratégique : Catalogue prioritaire sur ASP itérations
+**Document généré** : 2026-05-12 fin session | **Pivot stratégique** : Catalogue (Partie 1) prioritaire, ASP (Partie 2) en parallèle conditionné.

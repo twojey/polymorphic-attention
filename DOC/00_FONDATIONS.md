@@ -197,6 +197,44 @@ Auto-détecte :
 
 Consommé par tout code qui faisait `if cuda.is_available()` ou choisissait device/precision localement. Source unique de vérité.
 
+### Sprint
+
+**Définition** — Objectif scientifique orienté résultat qui **orchestre une ou plusieurs phases** + un livrable. Distinct des Phases qui sont des unités algorithmiques (extraction, audit SVD, training).
+
+Convention :
+- **Phase** = brique algorithmique (`CODE/phase{1..5}_*/run.py`)
+- **Sprint** = workflow scientifique (`CODE/sprints/sprint_<letter>_<name>.py`)
+
+Les Sprints (B-G + S4-S7) sont les unités d'exécution réelle sur pod. Chacun :
+- accepte une config Hydra (`OPS/configs/sprints/sprint_X.yaml`)
+- garde des checkpoints atomiques (resume après crash via `shared.checkpoint.Checkpoint`)
+- logge en UTC vers `<output_dir>/sprint.log` (via `shared.logging_helpers`)
+- gère retry transients via `shared.retry.retry_call`
+- produit un `summary.json` + manifest reproductible (git hash + dirty, torch, python, cuda)
+- évalue des critères go/no-go explicites (peut SKIPPED si `skip_if_failed=True`)
+
+Liste complète : voir [`DOC/sprints/README.md`](sprints/README.md).
+
+### FastSolver
+
+**Définition** — Algorithme rapide pour matrices structurées, **oracle de validation** des Properties O/Q/U.
+
+Si la Property O1 prédit rang de déplacement Toeplitz ≤ 2, alors le solver Levinson-Durbin doit converger avec erreur faible sur cette matrice — sinon contradiction observée → revisiter la mesure ou la théorie.
+
+Modules livrés :
+- `CODE/catalog/fast_solvers/levinson.py` — Toeplitz O(N²) via scipy.linalg.solve_toeplitz
+- `CODE/catalog/fast_solvers/cauchy.py` — Cauchy matrix multiply + solve
+- `CODE/catalog/fast_solvers/displacement.py` — Sylvester displacement Kailath/Pan
+
+### Oracle Backend
+
+**Définition** — Stratégie d'implémentation d'un Oracle. Trois backends sont disponibles pour LL/Vision/Code :
+
+1. **HFLanguageBackend / HFVisionBackend** — wrappe `transformers.AutoModel.from_pretrained`. Requires `transformers` + auth HF Hub. Retry automatique sur Hub download (transients réseau pod).
+2. **MinimalLMBackend / MinimalViTBackend / MinimalCodeBackend** — utilise `CODE/catalog/oracles/_minimal_transformer.py` (GPT-style minimal shippé dans le repo). Forward avec random init si pas de checkpoint, ou load partiel state_dict si disponible.
+
+Le contrat AbstractOracle (extract_regime → AttentionDump) est strict : la Battery est indépendante du backend.
+
 ---
 
 ## § 3. Vocabulaire mathématique

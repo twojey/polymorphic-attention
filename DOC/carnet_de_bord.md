@@ -1017,6 +1017,77 @@ defaults:
 
 ## Avancement chronologique
 
+### 2026-05-12 mardi — Session de complétion code "ready-to-pod" #milestone
+
+**TL;DR** : 5 commits propres, +120 tests verts (554 → 674), codebase complète pour Partie 1 + scaffolding Partie 2. Reste uniquement exécution pod.
+
+#### Récap chronologique
+
+**Vague V2 catalog (commit `91d19a4`)** : 22 nouvelles Properties frontière complètent les 76 existantes → **98 Properties / 23 familles** (75 % du catalogue théorique). Incluant :
+- Famille N créée (Oracle/student comparatives — squelettes skip-clean)
+- Frontière analytique : V1 pseudo-différentiel via FFT2D, W3 NIP via VC-shattering, K2 persistent homology
+- Réalisation P3-P6 : HSV decay, AIC/BIC, hierarchical blocks, gramians observabilité/contrôlabilité
+- Algébrique frontière : G6 Bernstein-Sato proxy, G7 D-module via différences finies, G8 syzygies via nullité
+- Battery enrichie : `ctx.metadata` expose tokens, query_pos, omegas → débloque F1 Lipschitz + M1 token-type sensitivity
+
+**Oracles + fast solvers (commit `25d943b`)** :
+- LL / Vision / Code Oracles **complets** avec deux backends : HuggingFace (`AutoModel.from_pretrained`) + MinimalTransformer GPT-style shippé dans le repo. Pipeline end-to-end fonctionne dès aujourd'hui avec random init (Xavier).
+- Module `catalog/fast_solvers/` : Levinson-Durbin (Toeplitz O(N²) via scipy.linalg.solve_toeplitz), Cauchy reference, Sylvester displacement Kailath/Pan. **Servent d'oracle de validation** pour les Properties O1/O4/O2 (si rang déplacement borné, le solver doit converger).
+- K2 persistent homology : import gudhi optional avec switch automatique vers vrai Rips complex si dispo, fallback union-find sinon.
+- Cache SVD partagé : 9 Properties (A1/A3/A4/A5/A6/E2/V3/R4/G8) partagent un seul `torch.linalg.svdvals(A)` par régime/layer via `ctx.svdvals_cached`.
+
+**Scaffolding complet (commit `fbcdae1`)** : 48 nouveaux fichiers, 3438 insertions.
+- `CODE/sprints/` : 10 runners (B, C, D, E, F, G, S4-S7) + SprintBase abstrait + CLI dispatcher
+- `CODE/livrables/` : 6 scripts génération artefacts paper (cross-Oracle, predictions, signatures, verdict ASP, figures, run_all batch)
+- `DOC/sprints/` + `DOC/reports/sprints/` : templates rapports Sprint
+- `DOC/paper/` : outlines Partie 1 (with 15 paris pré-enregistrés YAML) + Partie 2 + bibliography.bib
+- `OPS/configs/sprints/` : 10 configs Hydra par Sprint
+
+**Battery parallèle régimes (commit `d9d00d8`)** : `Battery.n_workers > 1` active ThreadPoolExecutor pour dispatch parallèle des régimes. Backward-compatible (défaut 1 = séquentiel). Speedup ≥ 1.5× testé sur sleep-bound. Adapté pour Oracles HF (I/O-bound, libère GIL).
+
+**Robustesse production-ready (commit `b973488`)** :
+- `shared/retry.py` : décorateur @retry + retry_call avec backoff exp + jitter, KeyboardInterrupt/SystemExit jamais retried, on_retry callback
+- SprintBase intègre `shared.logging_helpers.setup_logging` : log file horodaté UTC `<output_dir>/sprint.log`, append mode
+- Battery utilise `logging.getLogger("catalog.battery")` au lieu de print → cohérent root logger configuré par Sprint
+- HF Backends wrap `from_pretrained` avec retry_call (3 tentatives, base 2s, jitter) → résiste aux transients réseau pod
+- Manifest auto-rempli par SprintBase : git hash + dirty flag, torch version, python, cuda
+- `OPS/setup/launch_sprint.sh` : script bootstrap pod générique parallèle aux launch_phaseN.sh
+- `livrables/run_all.py` : orchestrateur 1-shot tous livrables Partie 1
+- 8 tests robustesse end-to-end : crash logs traceback, checkpoint resume après crash, fingerprint mismatch raises, log file written, etc.
+
+#### Décisions prises
+
+1. **HF backends optional** : retry inclus, mais `transformers` reste optional. Sans, MinimalLM/ViT/Code suffisent pour smoke tests cross-Oracle. Décidé pour ne pas forcer une dep lourde.
+2. **N family créée** : pour Properties Oracle/student (N1 F-divergence, N2 préservation, N3 Lipschitz diff). Squelettes skip cleanly si `ctx.metadata["student_attn"]` absent. Activées post-Sprint D.
+3. **gudhi opt-in** : import optional dans K2, switch backend automatique. Pas dans `pyproject.toml` pour rester léger.
+4. **Cache SVD via convention** : key `("svd_singular_values", shape, dtype)` partagée par 9 Properties. Pas de cache globalisé (chaque régime/layer a son contexte propre). Évite race conditions.
+5. **Battery n_workers défaut 1** : préservation strict de la backward compatibility. Activation explicite n_workers > 1 conseillée pour Oracles HF I/O-bound seulement.
+6. **Manifest dans summary.json** : git hash + dirty flag obligatoires. Permet reproduire exactement une exécution pod. Si dirty=True logué warning explicite.
+
+#### Surprises / corrections in-flight
+
+- **Dyck-k generator initial buggué** : générait des séquences avec parenthèses non-fermées (validate_dyck_k → 0 valides sur 3). Fix : pré-calculer slots_remaining et forcer close si plus de place. Test ajouté `test_code_dyck_k_generator`.
+- **Battery cross-oracle sur petit setup** : speedup parallèle invisible (BLAS PyTorch sature déjà tous les cores sur SVD batchées N=32, 3 régimes seulement). Utilité réelle = grandes N (256+), many régimes, Oracles HF I/O-bound. Note ajoutée dans docstring.
+- **Levinson buggué initial** : implémentation maison from-scratch faillait sur SPD N=8 (erreur 0.19). Switch vers scipy.linalg.solve_toeplitz (LAPACK référence). Tolerance Cauchy également relâchée (1e-3 vs 1e-10 — Cauchy mal-conditionnée par nature, κ ~ 10^10 sur N=8).
+
+#### État final
+
+- **674 tests verts** (vs 554 début session) + 1 skip OPENBLAS persistant
+- **0 régression** sur les tests legacy
+- **5 commits propres** atomiques
+- **Pipeline end-to-end** validé : `catalog.run --level research × 5 Oracles × 98 props` en quelques minutes wall-clock VPS
+- **Logs structurés** : tous les Sprints écrivent `sprint.log` UTC + manifest JSON
+- **Checkpoint/resume** opérationnel : tests de redémarrage après crash passent
+
+#### Reste honnêtement à faire (vraiment)
+
+1. **Compute pod** : exécution réelle Sprints B → G + S4-S7 (~$60-100, ~2-4 mois wall-clock)
+2. **Rédaction humaine** : papers Partie 1 + Partie 2 (~5-7 sem)
+
+**Aucun blocker codable identifiable.** Le système est prêt à tourner dès qu'un pod est disponible. Voir `ROADMAP.md` pour les commandes exactes.
+
+---
+
 ### 2026-05-11 lundi (après-midi — Run 2 GO, Run 3 crashé, Run 4 lancé)
 
 #### 15:08 UTC — Run 3 (S_KL option C) **relancé sur pod CPU** après diagnostic 4-runs #milestone
