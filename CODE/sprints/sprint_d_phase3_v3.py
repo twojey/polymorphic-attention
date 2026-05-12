@@ -74,7 +74,7 @@ class SprintDPhase3V3(SprintBase):
     def _run_inner(self) -> None:
         backbone = self._identify_backbone_class()
         self._log_metric("backbone_class", backbone)
-        print(f"[{self.sprint_id}] Backbone identifié : {backbone}", flush=True)
+        self.logger.info("[%s] Backbone identifié : %s", self.sprint_id, backbone)
 
         self._check_go_nogo(
             "backbone_class_recognized",

@@ -9,6 +9,7 @@ catalog + génération livrable) avec :
 - du **checkpoint/resume** (utilise shared/checkpoint atomique)
 - un **rapport** Markdown structuré (DOC/reports/sprints/)
 - une **traçabilité MLflow** opt-in
+- du **logging horodaté** vers fichier + console (shared/logging_helpers)
 
 Pattern : sous-classer SprintBase, override `_run_inner()`, et utiliser
 les helpers `_checkpoint_save/load`, `_log_metric`, `_write_report`.
@@ -17,8 +18,12 @@ les helpers `_checkpoint_save/load`, `_log_metric`, `_write_report`.
 from __future__ import annotations
 
 import json
+import logging
+import os
+import subprocess
 import sys
 import time
+import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,6 +33,7 @@ from typing import Any
 import torch
 
 from shared.checkpoint import Checkpoint
+from shared.logging_helpers import setup_logging, log_checkpoint
 
 
 class SprintStatus(str, Enum):
@@ -49,6 +55,7 @@ class SprintResult:
     artifacts: dict[str, str] = field(default_factory=dict)  # path → desc
     go_nogo_decisions: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    manifest: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,29 +66,17 @@ class SprintResult:
             "artifacts": self.artifacts,
             "go_nogo_decisions": self.go_nogo_decisions,
             "error": self.error,
+            "manifest": self.manifest,
         }
 
 
 class SprintBase(ABC):
     """Interface abstraite Sprint.
 
-    Sous-classes :
-    - `SprintBReExtract` : re-extraction phase 1 V2
-    - `SprintCCatalogFull` : Battery research × dumps
-    - `SprintDPhase3V3` : phase 3 V3+ avec Backbone informé
-    - `SprintEPhase4Warmup` : phase 4a warm-up Spectromètre
-    - `SprintFPhase4Autonomous` : phase 4b autonomous routing
-    - `SprintGPhase5Validation` : phase 5 tests 5a-6c
-    - `SprintS4SMNISTExtended` : SMNIST seq_len étendu
-    - `SprintS5Vision` : Vision Oracle training + adapter
-    - `SprintS6Code` : Code Oracle training + adapter
-    - `SprintS7LL` : LL Oracle (TinyStories) training + adapter
-
-    Convention metadata :
-    - `sprint_id` : identifiant unique (ex "B_re_extract", "C_catalog_full")
-    - `expected_duration_hint` : estimation wall-clock (string humain)
-    - `expected_compute_cost` : estimation $$ pod (string)
-    - `requires_pod` : True si Sprint demande GPU pod (vs VPS-only)
+    Convention metadata (class attributes) :
+    - `sprint_id` : identifiant unique
+    - `expected_duration_hint` / `expected_compute_cost` : estimations
+    - `requires_pod` : True si Sprint demande GPU pod
     """
 
     sprint_id: str = ""
@@ -96,6 +91,7 @@ class SprintBase(ABC):
         checkpoint_dir: str | Path | None = None,
         mlflow_uri: str | None = None,
         seed: int = 0,
+        log_level: int = logging.INFO,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -112,14 +108,24 @@ class SprintBase(ABC):
             ckpt_state_dir,
             fingerprint={"sprint_id": self.sprint_id, "seed": seed},
         )
+        # Logging : un fichier horodaté par run, dans output_dir
+        # NB : on configure le root logger via setup_logging, donc tous les
+        # sous-modules (catalog.battery, etc.) bénéficient du même handler.
+        self.logger = self._setup_logger(log_level)
+        self._result.manifest = self._build_manifest()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def run(self) -> SprintResult:
-        """Exécute le Sprint. Capture errors, gère checkpoint/resume."""
-        print(f"=== Sprint {self.sprint_id} : START ===", flush=True)
+        """Exécute le Sprint. Capture errors, gère checkpoint/resume + logging."""
+        self.logger.info("=== Sprint %s : START ===", self.sprint_id)
+        if self._checkpoint_resumed:
+            self.logger.info(
+                "[%s] checkpoint reprise (keys déjà sauvegardées : %s)",
+                self.sprint_id, self._checkpoint.keys(),
+            )
         t0 = time.time()
         self._result.status = SprintStatus.RUNNING
         if self.mlflow_uri:
@@ -130,19 +136,20 @@ class SprintBase(ABC):
         except _SprintSkipped as e:
             self._result.status = SprintStatus.SKIPPED
             self._result.error = str(e)
-            print(f"[{self.sprint_id}] SKIPPED : {e}", file=sys.stderr, flush=True)
+            self.logger.warning("[%s] SKIPPED : %s", self.sprint_id, e)
         except Exception as e:
             self._result.status = SprintStatus.FAILED
             self._result.error = f"{type(e).__name__}: {e}"
-            print(f"[{self.sprint_id}] FAILED : {e}", file=sys.stderr, flush=True)
-            import traceback
-            traceback.print_exc(file=sys.stderr)
+            self.logger.exception("[%s] FAILED : %s", self.sprint_id, e)
         finally:
             self._result.duration_seconds = time.time() - t0
             self._write_summary()
             self._teardown_mlflow()
-        print(f"=== Sprint {self.sprint_id} : {self._result.status.value.upper()} "
-              f"({self._result.duration_seconds:.1f}s) ===", flush=True)
+        self.logger.info(
+            "=== Sprint %s : %s (%.1fs) ===",
+            self.sprint_id, self._result.status.value.upper(),
+            self._result.duration_seconds,
+        )
         return self._result
 
     # ------------------------------------------------------------------
@@ -163,12 +170,15 @@ class SprintBase(ABC):
             "timestamp": time.time(),
         }
         self._result.go_nogo_decisions.append(decision)
+        status = "PASS" if condition else "FAIL"
+        self.logger.info("[go/no-go] %s : %s", criterion, status)
         if not condition and skip_if_failed:
             raise _SprintSkipped(f"go/no-go failed: {criterion}")
 
     def _log_metric(self, key: str, value: Any) -> None:
-        """Logge une métrique vers MLflow + dans le résultat."""
+        """Logge une métrique vers MLflow + dans le résultat + logger."""
         self._result.metrics[key] = value
+        log_checkpoint(self.logger, "metric", **{key: value})
         if self._mlflow_run is not None:
             try:
                 import mlflow  # noqa: PLC0415
@@ -176,34 +186,91 @@ class SprintBase(ABC):
                     mlflow.log_metric(key, float(value))
                 else:
                     mlflow.log_param(key, str(value))
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning("MLflow log_metric(%s) KO : %s", key, e)
 
     def _add_artifact(self, path: str | Path, description: str) -> None:
         """Référence un fichier produit par le Sprint."""
         self._result.artifacts[str(path)] = description
+        self.logger.info("[artifact] %s : %s", path, description)
         if self._mlflow_run is not None:
             try:
                 import mlflow  # noqa: PLC0415
                 mlflow.log_artifact(str(path))
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning("MLflow log_artifact(%s) KO : %s", path, e)
 
     def _checkpoint_save(self, key: str, obj: Any) -> None:
         """Persiste un objet checkpoint sous une clé nommée (atomique)."""
         self._checkpoint.save(key, obj)
+        self.logger.info("[ckpt] save key=%s", key)
 
     def _checkpoint_has(self, key: str) -> bool:
-        """True si l'étape `key` a déjà été sauvegardée."""
         return self._checkpoint.has(key)
 
     def _checkpoint_load(self, key: str) -> Any:
-        """Recharge l'état `key`. Lève FileNotFoundError si absent."""
         return self._checkpoint.load(key)
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _setup_logger(self, level: int) -> logging.Logger:
+        """Configure le root logger + retourne un logger nommé sprint.<id>.
+
+        Fichier log persistent : <output_dir>/sprint.log (append mode).
+        Console (stderr) : tous les niveaux ≥ INFO.
+        """
+        # On utilise shared.logging_helpers en lui pointant le fichier voulu
+        # via ASP_LOG_FILE env var, puis on appelle setup_logging.
+        log_file = self.output_dir / "sprint.log"
+        os.environ["ASP_LOG_FILE"] = str(log_file)
+        # On force ASP_REPO_ROOT pour fallback path
+        if "ASP_REPO_ROOT" not in os.environ:
+            for parent in [Path.cwd(), *Path.cwd().parents]:
+                if (parent / "OPS").is_dir() and (parent / "CODE").is_dir():
+                    os.environ["ASP_REPO_ROOT"] = str(parent)
+                    break
+        setup_logging(phase=self.sprint_id, prefix=f"sprint_{self.sprint_id}",
+                      level=level, to_file=True, reuse_bash_log=True)
+        return logging.getLogger(f"sprint.{self.sprint_id}")
+
+    def _build_manifest(self) -> dict[str, Any]:
+        """Construit le manifest de run : git, env, machine."""
+        manifest: dict[str, Any] = {
+            "sprint_id": self.sprint_id,
+            "seed": self.seed,
+            "timestamp_start": time.time(),
+            "requires_pod": self.requires_pod,
+            "expected_duration_hint": self.expected_duration_hint,
+            "expected_compute_cost": self.expected_compute_cost,
+        }
+        # Git hash
+        try:
+            commit = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            manifest["git_hash"] = commit
+        except Exception:
+            manifest["git_hash"] = "unknown"
+        # Git dirty flag
+        try:
+            dirty = subprocess.check_output(
+                ["git", "status", "--porcelain"],
+                stderr=subprocess.DEVNULL, timeout=2,
+            ).decode().strip()
+            manifest["git_dirty"] = bool(dirty)
+        except Exception:
+            manifest["git_dirty"] = None
+        # Python + torch version
+        import platform
+        manifest["python_version"] = platform.python_version()
+        manifest["torch_version"] = torch.__version__
+        manifest["cuda_available"] = torch.cuda.is_available()
+        if torch.cuda.is_available():
+            manifest["cuda_device"] = torch.cuda.get_device_name(0)
+        return manifest
 
     def _setup_mlflow(self) -> None:
         try:
@@ -211,8 +278,14 @@ class SprintBase(ABC):
             mlflow.set_tracking_uri(self.mlflow_uri)
             mlflow.set_experiment(f"sprint_{self.sprint_id}")
             self._mlflow_run = mlflow.start_run(run_name=self.sprint_id)
+            # Log manifest comme params MLflow
+            for k, v in self._result.manifest.items():
+                try:
+                    mlflow.log_param(k, str(v))
+                except Exception:
+                    pass
         except Exception as e:
-            print(f"[{self.sprint_id}] MLflow setup KO : {e}", file=sys.stderr)
+            self.logger.warning("[%s] MLflow setup KO : %s", self.sprint_id, e)
             self._mlflow_run = None
 
     def _teardown_mlflow(self) -> None:

@@ -22,6 +22,7 @@ from pathlib import Path
 
 import torch
 
+from shared.retry import retry_call
 from sprints.base import SprintBase
 
 
@@ -67,23 +68,37 @@ class SprintBReExtract(SprintBase):
         self._log_metric("n_layers", oracle.n_layers)
         self._log_metric("n_heads", oracle.n_heads)
 
-        # Boucle régimes avec checkpoint/resume
+        # Boucle régimes avec checkpoint/resume + retry
         dumps_dir = self.output_dir / "dumps"
         dumps_dir.mkdir(exist_ok=True)
         n_done = 0
+        n_skipped = 0
         for omega in self.omegas:
             for delta in self.deltas:
                 key = f"dump_omega{omega}_delta{delta}"
                 if self._checkpoint_has(key):
+                    self.logger.info("[%s] %s : déjà extrait (resume)", self.sprint_id, key)
                     n_done += 1
                     continue
                 regime = RegimeSpec(omega=omega, delta=delta, entropy=0.0)
+                self.logger.info("[%s] extracting régime (ω=%d, Δ=%d)…",
+                                 self.sprint_id, omega, delta)
                 try:
-                    dump = oracle.extract_regime(regime, self.n_examples)
+                    # Retry 3× : extract_regime peut échouer transitoirement
+                    # (OOM ponctuelle, race condition Oracle, etc.)
+                    dump = retry_call(
+                        oracle.extract_regime,
+                        args=(regime, self.n_examples),
+                        max_attempts=3, base_delay=1.0, jitter=0.5,
+                        logger=self.logger,
+                    )
                     dump.validate()
                 except Exception as e:
-                    print(f"[{self.sprint_id}] skip régime ({omega},{delta}) : {e}",
-                          flush=True)
+                    self.logger.error(
+                        "[%s] skip régime (ω=%d, Δ=%d) après 3 retries : %s",
+                        self.sprint_id, omega, delta, e,
+                    )
+                    n_skipped += 1
                     continue
                 # Save dump
                 dump_path = dumps_dir / f"{key}.pt"
@@ -102,6 +117,7 @@ class SprintBReExtract(SprintBase):
 
         self._log_metric("n_dumps_produced", n_done)
         self._log_metric("n_regimes_target", len(self.omegas) * len(self.deltas))
+        self._log_metric("n_regimes_skipped", n_skipped)
 
         self._check_go_nogo(
             "min_dumps_produced",

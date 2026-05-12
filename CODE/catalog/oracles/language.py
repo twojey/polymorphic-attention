@@ -102,13 +102,17 @@ class MinimalLMBackend(_LMBackend):
 class HFLanguageBackend(_LMBackend):
     """Backend HuggingFace AutoModelForCausalLM. Requiert `transformers`.
 
+    Download HuggingFace Hub avec retry automatique (3 tentatives, backoff
+    exponentiel) — utile sur pod où la connexion peut être instable.
+
     Usage :
         backend = HFLanguageBackend("meta-llama/Llama-3.2-1B", device="cuda")
         oracle = LLOracle(backend=backend, ...)
     """
 
     def __init__(self, model_name_or_path: str, device: str = "cpu",
-                 torch_dtype: torch.dtype = torch.float32) -> None:
+                 torch_dtype: torch.dtype = torch.float32,
+                 max_attempts: int = 3) -> None:
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as e:
@@ -116,18 +120,32 @@ class HFLanguageBackend(_LMBackend):
                 "HFLanguageBackend requiert `transformers`. "
                 "uv add transformers ou utiliser MinimalLMBackend."
             ) from e
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        from shared.retry import retry_call
+        import logging
+        log = logging.getLogger("catalog.oracles.language")
+
+        # Retry sur les téléchargements Hub (réseau pod instable)
+        self.tokenizer = retry_call(
+            AutoTokenizer.from_pretrained, args=(model_name_or_path,),
+            max_attempts=max_attempts, base_delay=2.0, jitter=0.5,
+            logger=log,
+        )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path, torch_dtype=torch_dtype,
-            attn_implementation="eager",  # nécessaire pour output_attentions
+        self.model = retry_call(
+            AutoModelForCausalLM.from_pretrained,
+            args=(model_name_or_path,),
+            kwargs={"torch_dtype": torch_dtype, "attn_implementation": "eager"},
+            max_attempts=max_attempts, base_delay=2.0, jitter=0.5,
+            logger=log,
         )
         self.model.eval()
         self.model.to(device)
         self.device = device
         self.n_layers = self.model.config.num_hidden_layers
         self.n_heads = self.model.config.num_attention_heads
+        log.info("HFLanguageBackend loaded: %s (n_layers=%d, n_heads=%d)",
+                 model_name_or_path, self.n_layers, self.n_heads)
 
     def tokenize(self, texts: list[str], max_len: int) -> torch.Tensor:
         enc = self.tokenizer(texts, padding="max_length", truncation=True,

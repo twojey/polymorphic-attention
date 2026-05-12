@@ -161,10 +161,14 @@ class MinimalViTBackend(_VisionBackend):
 
 
 class HFVisionBackend(_VisionBackend):
-    """Backend HuggingFace AutoModel (DINOv2, ViT, etc.). Requiert `transformers`."""
+    """Backend HuggingFace AutoModel (DINOv2, ViT, etc.). Requiert `transformers`.
+
+    Download Hub avec retry automatique (3 tentatives, backoff exponentiel).
+    """
 
     def __init__(self, model_name_or_path: str, device: str = "cpu",
-                 torch_dtype: torch.dtype = torch.float32) -> None:
+                 torch_dtype: torch.dtype = torch.float32,
+                 max_attempts: int = 3) -> None:
         try:
             from transformers import AutoImageProcessor, AutoModel
         except ImportError as e:
@@ -172,16 +176,26 @@ class HFVisionBackend(_VisionBackend):
                 "HFVisionBackend requiert `transformers`. "
                 "uv add transformers ou utiliser MinimalViTBackend."
             ) from e
-        self.processor = AutoImageProcessor.from_pretrained(model_name_or_path)
-        self.model = AutoModel.from_pretrained(
-            model_name_or_path, torch_dtype=torch_dtype,
-            attn_implementation="eager",
+        from shared.retry import retry_call
+        import logging
+        log = logging.getLogger("catalog.oracles.vision")
+
+        self.processor = retry_call(
+            AutoImageProcessor.from_pretrained, args=(model_name_or_path,),
+            max_attempts=max_attempts, base_delay=2.0, jitter=0.5, logger=log,
+        )
+        self.model = retry_call(
+            AutoModel.from_pretrained, args=(model_name_or_path,),
+            kwargs={"torch_dtype": torch_dtype, "attn_implementation": "eager"},
+            max_attempts=max_attempts, base_delay=2.0, jitter=0.5, logger=log,
         )
         self.model.eval()
         self.model.to(device)
         self.device = device
         self.n_layers = getattr(self.model.config, "num_hidden_layers", 12)
         self.n_heads = getattr(self.model.config, "num_attention_heads", 12)
+        log.info("HFVisionBackend loaded: %s (n_layers=%d, n_heads=%d)",
+                 model_name_or_path, self.n_layers, self.n_heads)
 
     @torch.no_grad()
     def forward_with_attn(self, images: torch.Tensor) -> list[torch.Tensor]:

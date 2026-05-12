@@ -26,9 +26,8 @@ HuggingFace ne sont pas thread-safe pendant le forward.
 
 from __future__ import annotations
 
-import sys
+import logging
 import threading
-import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,6 +36,8 @@ import torch
 
 from catalog.oracles.base import AbstractOracle, AttentionDump, RegimeSpec
 from catalog.properties.base import Property, PropertyContext
+
+_LOGGER = logging.getLogger("catalog.battery")
 
 
 @dataclass
@@ -280,7 +281,6 @@ class Battery:
         return regime.key, regime_out, dump
 
     def _log_err(self, msg: str) -> None:
-        """Log thread-safe vers stderr (lock pour éviter interleaving)."""
+        """Log thread-safe via logger (lock pour éviter interleaving)."""
         with self._stderr_lock:
-            print(msg, file=sys.stderr, flush=True)
-            traceback.print_exc(file=sys.stderr, limit=3)
+            _LOGGER.error(msg, exc_info=True)
