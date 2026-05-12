@@ -387,6 +387,7 @@ def _log_bucket_metrics(
     seq_len: int,
     hankel_tau: float,
     max_examples_metrics: int = 32,
+    skip_seq_len_above: int = 500,
 ) -> None:
     """Agrégats Hankel rank + entropie spectrale par couche (tous régimes confondus).
 
@@ -409,7 +410,20 @@ def _log_bucket_metrics(
     Tout échec sur une couche est reporté à stderr avec traceback (jamais
     silencieux) mais ne stoppe pas l'extraction — les dumps complets sont
     déjà sur disque.
+
+    Skip total si seq_len > skip_seq_len_above (défaut 500) : la boucle
+    Python O(B × N) sur Hankel rank devient impraticable au-delà
+    (N=1287 = 1.4M SVDs même avec subsample=32). Les métriques pour
+    grands seq_len sont mieux calculées par batch GPU FP32 en phase 2.
     """
+    if seq_len > skip_seq_len_above:
+        _stderr(
+            f"[bucket_metrics] seq={seq_len} > {skip_seq_len_above} : "
+            f"skip log_metrics (trop coûteux en Python row-by-row Hankel). "
+            f"Les métriques formelles seront calculées en phase 2 SVD batchée."
+        )
+        return
+
     attn: list[torch.Tensor] = dump["attn"]  # type: ignore[assignment]
 
     for ell, A in enumerate(attn):  # A : (B, H, N, N)
