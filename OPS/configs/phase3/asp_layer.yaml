@@ -1,38 +1,91 @@
-# Phase 3 — ASPLayer. Sprint 2.
+# Phase 3 — ASPLayer. Sprint 2, Structure-MNIST.
 # Spec : DOC/03. Pré-enregistré (T.1).
 #
-# IMPORTANT : la classe Backbone (toeplitz / hankel / cauchy / composite) est
-# déterminée APRÈS phase 2 sur la base du dictionnaire SCH. Champ
-# `backbone.class_name` à overrider après phase 2.
+# IMPORTANT : `backbone.class_name` est à FIXER après lecture du verdict
+# phase 2 (rapport phase2.md, champ "class_dominante"). Par défaut on
+# utilise "identity" qui permet un smoke check de l'infrastructure
+# Matriochka + Soft-Mask SANS Backbone.
 
 defaults:
   - _self_
+  - thresholds_phase3@thresholds_phase3
 
 domain: smnist
 sprint: 2
+seed: 1000
 
-# --- Backbone (à raffiner post-phase-2) ---
+# --- Modèle (DOIT matcher Oracle pour comparabilité) ---
+model:
+  d_model: 256
+  n_heads: 8
+  n_layers: 6
+  d_ff: 1024
+  max_seq_len: 8192
+  dropout: 0.0
+  n_classes: 10
+
+# --- SSG (réplique de oracle_smnist.yaml pour cohérence tri-partition) ---
+ssg:
+  n_ops: 4
+  n_noise: 8
+  seed_train: 42
+  seed_val: 43
+  seed_audit_svd: 44
+  n_examples_per_regime: 4096
+  axes:
+    omega:
+      sweep: [0, 1, 2, 4, 6, 8]
+      reference: 2
+    delta:
+      sweep: [0, 16, 64, 256, 1024]
+      reference: 16
+    entropy:
+      sweep: [0.0, 0.25, 0.5, 0.75, 1.0]
+      reference: 0.0
+
+# --- Tri-partition (DOC/01 §8.6, mêmes seeds que phase 1) ---
+dataset_split_smnist:
+  train_oracle: 0.70
+  audit_svd: 0.20
+  init_phase3: 0.10
+  seed: 7
+
+# --- Backbone (post-phase-2 obligatoire pour run scientifique sérieux) ---
 backbone:
-  class_name: identity      # placeholder. À remplacer après phase 2.
-  params: {}                # paramètres spécifiques à la classe (ex. nombre de modes)
+  class_name: identity      # PLACEHOLDER. Override post-phase2 :
+                            #   toeplitz | hankel | identity | linear | composite
+                            # Ex : backbone.class_name=toeplitz
+  params:                   # paramètres spécifiques à la classe
+    kernel_len: 256
+    state_size: 32
+    n_heads: 1
 
 # --- ASPLayer ---
 asp_layer:
-  d_model: 256
-  R_max: 32                 # à raffiner via recommandation phase 1 (R_max preliminaire)
+  d_model: 256              # doit matcher model.d_model
+  R_max: 32                 # à raffiner via R_max recommandé phase 2
   soft_mask_beta: 4.0
   layernorm: true
-  init_strategy: xavier     # xavier | orthogonal | smart (post-phase-2.6)
+  init_strategy: xavier     # xavier | orthogonal | smart
+  smart_init_K_per_layer: 16
+  smart_init_k_per_head: 2
+
+# --- Training ---
+training:
+  batch_size: 32
+  lr: 3.0e-4
+  weight_decay: 0.0
+  max_epochs: 10
+  grad_clip: 1.0
+  log_interval_steps: 20
+  precision: bf16-mixed
 
 # --- Losses ---
 loss:
   matriochka:
     n_rank_samples: 4
-    weight_strategy: uniform   # uniform | decreasing
-    rank_schedule:             # rangs forcés systématiquement présents
-      - R_max
-      - R_max_half
-      - R_max_quarter
+    weight_strategy: uniform
+    lambda_weight: 1.0
   consistency:
     weight: 0.1
     n_samples: 4
@@ -40,7 +93,7 @@ loss:
   task:
     type: cross_entropy
 
-# --- Sanity checks (DOC/03 §3.6) ---
+# --- Sanity checks (DOC/03 §3.7) ---
 sanity:
   saturation_tolerance: 0.10
   smoothness_max_jump: 0.5

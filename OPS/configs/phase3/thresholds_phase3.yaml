@@ -1,0 +1,22 @@
+# Seuils pré-enregistrés phase 3 (DOC/03 §3.7, §3.9).
+
+# Saturation : ASP val_acc ≥ oracle - tol pour passer
+saturation:
+  tolerance_acc: 0.10           # marge tolérée vs oracle
+
+# Effondrement : à r=0, |ASP - Backbone| < atol
+collapse:
+  atol: 1.0e-5
+
+# Monotonie : qualité(r+1) >= qualité(r) - eps
+monotone:
+  eps: 1.0e-6
+
+# Lissité : second-diff |q(r+1) - 2q(r) + q(r-1)| < seuil
+smoothness:
+  max_jump: 0.5
+
+# Verdict phase 3 : tous les 4 doivent passer ET val_acc ≥ oracle - tol
+verdict:
+  require_all_sanity: true
+  require_acc_saturation: true
