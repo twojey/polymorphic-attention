@@ -626,11 +626,12 @@ def main(cfg: DictConfig) -> None:
                         f"valide, {size_b / 1e6:.1f} MB)",
                         flush=True,
                     )
-                    _safe_mlflow(
-                        f"log_artifact existing {dump_path.name}",
-                        mlflow.log_artifact,
-                        str(dump_path), artifact_path="audit_dumps",
-                    )
+                    if bool(OmegaConf.select(cfg, "extraction.mlflow_log_dumps") or False):
+                        _safe_mlflow(
+                            f"log_artifact existing {dump_path.name}",
+                            mlflow.log_artifact,
+                            str(dump_path), artifact_path="audit_dumps",
+                        )
                     n_dumps_skipped += 1
                     continue
 
@@ -667,11 +668,17 @@ def main(cfg: DictConfig) -> None:
                 f"({size_b / 1e6:.1f} MB)",
                 flush=True,
             )
-            _safe_mlflow(
-                f"log_artifact {dump_path.name}",
-                mlflow.log_artifact,
-                str(dump_path), artifact_path="audit_dumps",
-            )
+            # Pour les dumps multi-bucket V2, on ÉVITE log_artifact qui copie
+            # le fichier dans /mlruns (cf. carnet 2026-05-12 pod disk blowup :
+            # MLflow file backend a doublé l'usage disque sur 89 GB). Les
+            # dumps sont sur disque, rapatriés via rsync séparé. Override via
+            # `extraction.mlflow_log_dumps=true` si nécessaire.
+            if bool(OmegaConf.select(cfg, "extraction.mlflow_log_dumps") or False):
+                _safe_mlflow(
+                    f"log_artifact {dump_path.name}",
+                    mlflow.log_artifact,
+                    str(dump_path), artifact_path="audit_dumps",
+                )
             n_dumps_saved += 1
 
             _log_bucket_metrics(dump, seq_len=seq_len, hankel_tau=hankel_tau)
