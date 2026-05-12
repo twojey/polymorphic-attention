@@ -20,8 +20,14 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    """Lazy import SMNISTOracle (qui dépend de phase1_metrologie)."""
+    """Lazy imports : SMNISTOracle (dépend phase1) + LLOracle (Sprint S7)."""
     if name == "SMNISTOracle":
         from catalog.oracles.smnist import SMNISTOracle
         return SMNISTOracle
+    if name == "LLOracle":
+        from catalog.oracles.language import LLOracle
+        return LLOracle
+    if name == "LLModelSpec":
+        from catalog.oracles.language import LLModelSpec
+        return LLModelSpec
     raise AttributeError(f"module 'catalog.oracles' has no attribute {name!r}")

@@ -123,6 +123,12 @@ def main() -> None:
     parser.add_argument("--synthetic-n-layers", type=int, default=2)
     parser.add_argument("--synthetic-n-heads", type=int, default=4)
     parser.add_argument("--synthetic-seed", type=int, default=0)
+    # MLflow
+    parser.add_argument("--no-mlflow", action="store_true",
+                        help="Désactive MLflow logging (override default opt-in)")
+    parser.add_argument("--mlflow-sprint", type=int, default=1)
+    parser.add_argument("--mlflow-status", default="exploratory",
+                        choices=("exploratory", "pre_registered", "invalidated"))
 
     args = parser.parse_args()
 
@@ -194,6 +200,18 @@ def main() -> None:
     with open(results_json, "w") as f:
         json.dump(results.to_dict(), f, indent=2, default=str)
     print(f"=== Résultats écrits : {results_json} ===", flush=True)
+
+    # --- MLflow logging (opt-in si MLFLOW_TRACKING_URI défini) ---
+    if not args.no_mlflow:
+        from catalog.mlflow_logger import log_battery_results
+        log_battery_results(
+            results,
+            output_dir=output_dir,
+            run_name=f"{args.oracle}_{args.level}_{args.n_examples}ex",
+            sprint=args.mlflow_sprint,
+            domain=args.oracle,
+            status=args.mlflow_status,
+        )
 
     # --- Résumé console ---
     n_regimes = len(results.per_regime)
