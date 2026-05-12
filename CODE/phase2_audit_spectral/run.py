@@ -476,7 +476,10 @@ def main(cfg: DictConfig) -> None:
 
         # --- 9. Diagnostic découplage S_Spectral ↔ r_eff (garde-fou H2) ---
         # Pré-requis : OPENBLAS_NUM_THREADS=1 (vérifié dans compute_s_spectral)
-        decoupling_enabled = bool(OmegaConf.select(cfg, "decoupling.enabled") or True)
+        # Bug logique évité : `bool(X or True)` retourne True même si X=False.
+        # Utiliser default explicite via `default=True` dans OmegaConf.select.
+        _dec_en = OmegaConf.select(cfg, "decoupling.enabled", default=True)
+        decoupling_enabled = bool(_dec_en)
         decoupling_diag = None
         if state.has("decoupling_diag"):
             print("[checkpoint] SKIP diagnostic découplage (déjà calculé)", flush=True)
