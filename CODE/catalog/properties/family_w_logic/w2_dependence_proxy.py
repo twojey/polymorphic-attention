@@ -48,12 +48,8 @@ class W2DependenceProxy(Property):
             return {"n_matrices": int(B * H), "skip_reason": "N < 3"}
 
         A_work = A.to(device=ctx.device, dtype=ctx.dtype)
-        # Pairwise distances entre lignes
-        rows = A_work.flatten(start_dim=-2)  # wait, c'est mal — rows ce sont (B, H, N, N), je veux (B, H, N) de vecteurs N
         rows = A_work  # (B, H, N, N) où dim=-2 indexe les lignes
-        # Distances entre paires : (B, H, N, N) matrice où D[i, j] = ‖A[i,:] − A[j,:]‖
-        diff = rows.unsqueeze(-3) - rows.unsqueeze(-2)  # (B, H, N, N, N2)
-        D = diff.norm(dim=-1)  # (B, H, N, N)
+        D = torch.cdist(rows, rows)  # (B, H, N, N), O(N²) mémoire
 
         # Pour chaque ligne, prendre top-2 voisins (excluant soi-même)
         # On masque la diagonale

@@ -41,6 +41,65 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 — **Sprint B OOM VRAM (3/9 régimes) → décision pod-split CPU/GPU** #bug #surprise #decision
+
+**Contexte** : lancement Sprint B (re-extract dumps SMNIST sweep 3×3 = 9 régimes) sur pod RTX 5090 32 GB. 6 régimes produits, **3 OOM CUDA** : (ω=2, Δ=256), (ω=4, Δ=64), (ω=4, Δ=256). L'erreur sur (ω=2, Δ=256) demandait **81.78 GiB VRAM** sur une GPU de 32 GiB.
+
+**Surprise — croissance non-linéaire des dumps en ω** #surprise
+
+Taille des dumps disque mesurée (B=512 examples, n_layers=6, n_heads=8, FP32) :
+
+| Régime | ω=0 | ω=2 | ω=4 |
+|---|---:|---:|---:|
+| Δ=16 | 68 MB | 1.4 GB | 4.4 GB |
+| Δ=64 | 842 MB | **20 GB** | (OOM extrapolé ~50 GB VRAM) |
+| Δ=256 | 13 GB | (OOM 82 GB VRAM) | (OOM extrapolé ~150 GB VRAM) |
+
+Le passage ω=0 → ω=2 multiplie la taille par **~24×** à Δ=64 constant (842 MB → 20 GB). Hypothèse : l'oracle SMNIST V2 augmente le nombre d'exemples/régime ou le batch interne avec ω (plus de difficulté = plus de samples gardés pour stat robuste). À tracer précisément lors du re-run CPU.
+
+**Implication GPU** : aucun GPU consumer/cloud raisonnable ne tient (ω=4, Δ=256) (~150 GB VRAM estimé) :
+- 5090 32 GB ❌, A100 80 GB ❌, H200 141 GB ❌
+- Seul B200 192 GB (~$5-7/h, indispo Community) ou **CPU 251 GB RAM** ✓
+- Spec officielle `OPS/configs/sprints/sprint_b.yaml:11` dit déjà `device: cpu` — l'override CUDA en run était une erreur.
+
+**Décision 1 — Sprint B doit être complété en CPU sur tous les 9 régimes** #decision
+
+Skip des 3 régimes refusé. Raisons :
+- Property M2 `StressVariation` (`catalog/properties/family_m_conditional/m2_stress_variation.py:51`) est `scope=cross_regime` : elle calcule `r_eff_range_across_regimes`, `H_spec_range_across_regimes` = amplitudes entre extrêmes. Skip les régimes extrêmes ⇒ M2 systématiquement sous-estimée.
+- Cross-Oracle Partie 1 : comparaison SMNIST(6 régimes) vs LL(9 régimes) sur M2 = comparaison biaisée. Toute property `cross_regime` future aurait le même biais.
+- [[feedback-falsifiability-first]] : skip post-hoc des régimes lourds = ajustement opportuniste. Exactement ce qu'on veut éviter.
+
+Coût : CPU run 9/9 ≈ 15-20 min × $0.10-0.20/h ≈ $0.05 supplémentaires. Négligeable.
+
+**Décision 2 — Pod-split CPU dédié Partie 1 vs GPU 5090 réservé Sprints D-G** #decision
+
+Taxonomie compute par sprint :
+
+| Sprint | Tâche | Charge | Cible |
+|---|---|---|---|
+| B | Extract attention Oracle SMNIST | RAM-bound (matrices denses) | **CPU** |
+| C | Catalog 131 properties (SVD FP64, scalaires) | CPU-bound | **CPU** |
+| S4 | SMNIST seq étendu 1024-4096 | RAM-bound (plus gros que B) | **CPU** |
+| S5 | Vision DINOv2 (87M params, inference) | GPU forward, tourne CPU | CPU acceptable |
+| S6 | Code StarCoder-2-3B (inference) | GPU forward, tourne CPU | CPU acceptable |
+| S7 | LL Llama-3.2-1B + GPT-2 (inference) | GPU forward, tourne CPU | CPU acceptable |
+| **D** | **Train ASPLayer 50 epochs** | **Training NN** | **GPU 5090 Blackwell sm_120** |
+| **E-G** | **Phase 4-5 ASP** | **Training NN** | **GPU 5090** |
+
+Conclusion : la 5090 ne sert *vraiment* qu'aux Sprints D-G (Partie 2 ASP), prévus dans 1-2 semaines de wall-clock. Pour la Partie 1 prioritaire (cf. [[project-strategic-pivot]]), elle est utilisée à ~5 % et coûte $0.50-0.80/h pour du compute CPU-bound.
+
+**Stratégie opérationnelle** :
+- **Pod CPU dédié** (RAM > 100 GB, $0.10-0.20/h) : tmux multi-pane pour Sprints B + C + S4 + S5-S7 en parallèle.
+- **Pod 5090 actuel** : à killer pour économie immédiate, **re-louer plus tard** quand Sprint D démarre.
+
+**Économie estimée** : $0.50/h × 24h × 3-7 jours de Partie 1 = **$36-84 économisés** par rapport au scénario "garder la 5090 active tout du long".
+
+**Caveat re-spawning du pod** : à chaque nouvelle location d'un pod 5090 il faudra refaire le setup (cf. `OPS/env/SETUP.md` + `OPS/scripts/setup_pod.sh` qui sont idempotents). Le checkpoint Oracle SMNIST (`OPS/checkpoints/oracle_e2f0b5e.ckpt`, 19 MB) est versionné côté VPS, donc reproductible.
+
+**Action ouverte** : la session courante a quand même lancé Sprint C sur les 6 dumps disponibles (pas les 9), pour ne pas griller du temps GPU. Sprint C tournait avec les dumps 6/9 et un bug W2 indépendant (cubique en N → OOM à Δ=256) qui a été fix dans cette session (commit pending, `torch.cdist` au lieu de `(B,H,N,N,N²)` explicite). Quand Sprint B sera relancé sur pod CPU avec 9/9 régimes, il faudra aussi relancer Sprint C from-scratch sur les 9 dumps pour avoir un catalogue cohérent (M2 cross_regime, en particulier).
+
+---
+
 ### 2026-05-12 — **Double Oracle LL : pré-entraîné + from-scratch pour tester universalité**
 
 **Trigger** : question scientifique sur comparabilité cross-Oracle. Au lieu de choisir entre GPT-2 pré-entraîné (rapide, gratuit) et Oracle LL entraîné from-scratch (rigoureux, contrôlé), **avoir les deux** pour trancher directement.
