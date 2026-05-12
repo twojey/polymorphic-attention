@@ -591,13 +591,51 @@ Spec : [DOC/03_phase_kernel_asp.md](DOC/03_phase_kernel_asp.md)
 - [x] ASPLayer + tests unitaires (16 tests CPU passent)
 - [x] Configs `OPS/configs/phase3/asp_layer.yaml` (tous seuils pré-enregistrés)
 - [x] Template `DOC/reports/phase3_template.md`
-- [ ] Driver `phase3_kernel_asp.run` — **à écrire** post-phase-2 (intègre Backbone concret)
+- [x] Driver `phase3_kernel_asp.run_train` (avec checkpoint + retry + caps) — `c6b650c`
+- [x] Mode `delta_attn_mode='attention'` V2 (token-mixing low-rank) — `44d5b1b`
 - [ ] Heatmap R_target par distillation (baseline phase 4) — `forward_with_rank(R_max)` sur grille de stress + `shared.plotting.heatmap_2d`
 
-### 3.8 — 🚪 Go/no-go phase 3
-- [ ] Quatre sanity checks passés
-- [ ] Si **no-go** : revoir Backbone/R_max ou rééquilibrer λ_M/λ_C
-- [ ] Si **go** : passage stage 4
+### 3.8 — 🚪 Go/no-go phase 3 — scénarios possibles
+
+Plusieurs verdicts possibles, anticipés pour cadrer la suite (cf. carnet 2026-05-12 §"Phase 3 NO-GO + bug architectural") :
+
+| Scénario | val_acc vs Oracle | Action |
+|---|---|---|
+| **GO franc** | ≥ Oracle − 0.10, 4/4 sanity | Passage stage 4 (Spectromètre + routage budget) |
+| **GO conditionnel (smart init)** | atteint avec smart init seulement | GO mais ablation Xavier vs smart obligatoire en phase 5 |
+| **GO partiel (saturation faible)** | apprend mais < Oracle − 0.10 | Itérer R_max ou Backbone non-trivial avant stage 4 |
+| **NO-GO architecture ΔAttn** | val_acc ≈ random (V1 linear ET V2 attention échouent) | Repenser ΔAttn (Q/K séparés, multi-head, etc.) avant stage 4 |
+| **NO-GO Matriochka cassée** | lissité ou monotonie fail | Rééquilibrer λ_M / λ_C, sampling de rangs |
+| **NO-GO fondamental** | effondrement fail (sanity 2) | Bug structurel à fixer, bloquant |
+| **NO-GO total** | aucune variante ne marche après itérations | → Sprint phase 2++ étendu (cf. §3.9 ci-dessous) |
+
+### 3.9 — Plan de réorientation si NO-GO total
+
+Le verdict phase 2 actuel ("100 % orphan") porte sur **3 projecteurs sur ~17 prévus dans le catalogue DOC/00b**. Avant de conclure que ASP n'est pas viable, on doit avoir testé exhaustivement le catalogue.
+
+Sprint A — **Implémentation projecteurs manquants** (5-7 jours dev) :
+- B3 Cauchy + Vandermonde (avec poles/base appris)
+- B5 Block-diagonal, B6 Banded
+- O2 Cauchy-like, O3 Vandermonde-like (rangs de déplacement)
+- P1-P4 Ho-Kalman block + HSV + ordre minimal
+- T équivariances (circulantes, block-circulantes)
+- U1-U5 Butterfly, Monarch, Pixelfly, Block-sparse, Sparse+low-rank
+- Compositions : multiplicative `M_1·M_2`, hiérarchique par layer, mélange par tête
+
+Sprint B — **Re-extraction dumps phase 1 V2** (~30 min + $0.30 sur pod) si non préservés.
+
+Sprint C — **Phase 2 V2 — batteries étendues** (1 jour compute + 2 jours analyse) :
+- Lancer `battery_a_v2` sur catalogue étendu (~25 projecteurs au lieu de 3)
+- Identifier la classe dominante réelle par régime (Cauchy ? Banded ? Block-sparse ?)
+- Mettre à jour dictionnaire SCH
+
+Sprint D — **Phase 3 V3 avec Backbone vrai dérivé** (1-2 jours) :
+- Au lieu de `IdentityBackbone` placeholder, utiliser le Backbone de la classe identifiée Sprint C
+- Re-tester ASPLayer avec architecture informée par la mesure
+
+**Coût total** : ~2 semaines wall-clock + ~$1.50 compute. Bénéfice : verdict scientifique robuste sur la nature de la structure SMNIST, fondations solides pour stratégie d'attention quasi-linéaire (ou conclusion négative motivée).
+
+Cf. carnet 2026-05-12 §"Question stratégique catalogue exhaustif" pour l'analyse complète des ~100 tests possibles et la matrice de priorité.
 
 ---
 
