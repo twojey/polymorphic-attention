@@ -68,3 +68,10 @@ extraction:
   batch_size_cap: 8                    # plafond batch_size adaptatif (cf. _adaptive_batch_size)
   target_peak_gb: 15.0                 # budget pic FP64 attention pour le batch adaptatif
   resume_skip_existing: true           # skip buckets déjà extraits + valides (post-crash, post-mlflow-fail)
+  # --- Bornes disque/compute (DOC/carnet 2026-05-12) ---
+  # Sans cap, le bucket seq=5127 (Δ=1024, ω=2) atteint ~8 TB FP64 et est
+  # incalculable en SVD. Ces 3 options se cumulent (skip d'abord, puis cap
+  # taille, puis cap nombre).
+  skip_seq_len_above: 2000             # null=pas de skip ; 2000 drop seq=5127 (Δ=1024)
+  max_bucket_size_gb: 15.0             # null=pas de cap ; cap_auto = floor(GB / (L·H·N²·8))
+  max_examples_per_bucket: null        # null=pas de cap dur ; sécurité supplémentaire

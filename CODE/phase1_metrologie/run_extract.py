@@ -208,6 +208,74 @@ def _group_by_seq_len(
     return dict(groups)
 
 
+def _apply_bucket_caps(
+    seq_len_groups: dict[int, list[int]],
+    *,
+    L: int,
+    H: int,
+    skip_seq_len_above: int | None,
+    max_bucket_size_gb: float | None,
+    max_examples_per_bucket: int | None,
+    seed: int,
+) -> dict[int, list[int]]:
+    """Applique les bornes disque/compute sur les buckets seq_len.
+
+    Trois bornes mutuellement compatibles, dans l'ordre :
+    1. `skip_seq_len_above` : drop pur des buckets seq_len > N. Évite les
+       extractions impossibles (e.g., seq_len=5127 avec FP64 attention =
+       ~8 TB pour 819 ex).
+    2. `max_bucket_size_gb` : cap auto par bucket en fonction de la taille
+       FP64 estimée. cap_auto = floor(GB·1e9 / (L·H·N²·8)).
+    3. `max_examples_per_bucket` : cap uniforme dur (sécurité).
+
+    Le sous-échantillonnage est déterministe (seeded) — pas d'ordre par-index
+    aveugle qui privilégierait certains régimes. Sur chaque bucket conservé,
+    on tire `cap` indices avec rng.choice(replace=False).
+
+    Reporte explicitement à stderr ce qui a été droppé / capped (pas de
+    silence).
+    """
+    if skip_seq_len_above is None and max_bucket_size_gb is None and max_examples_per_bucket is None:
+        return seq_len_groups
+
+    import numpy as _np
+    rng = _np.random.default_rng(seed)
+
+    def _cap_for(n_examples_avail: int, seq_len: int) -> int:
+        cap = n_examples_avail
+        if max_bucket_size_gb is not None:
+            cap_size = max(1, int(
+                max_bucket_size_gb * 1e9 / (L * H * seq_len * seq_len * 8)
+            ))
+            cap = min(cap, cap_size)
+        if max_examples_per_bucket is not None:
+            cap = min(cap, max_examples_per_bucket)
+        return cap
+
+    out: dict[int, list[int]] = {}
+    for seq_len in sorted(seq_len_groups.keys()):
+        indices = seq_len_groups[seq_len]
+        if skip_seq_len_above is not None and seq_len > skip_seq_len_above:
+            _stderr(
+                f"[bucket_cap] DROP seq_len={seq_len} ({len(indices)} ex) — "
+                f"au-dessus de skip_seq_len_above={skip_seq_len_above}"
+            )
+            continue
+        cap = _cap_for(len(indices), seq_len)
+        if cap < len(indices):
+            chosen = rng.choice(len(indices), size=cap, replace=False)
+            sub = sorted(indices[i] for i in chosen)
+            size_est_gb = (cap * L * H * seq_len * seq_len * 8) / 1e9
+            _stderr(
+                f"[bucket_cap] seq_len={seq_len} : {len(indices)} → {cap} ex "
+                f"(estim. {size_est_gb:.2f} GB FP64)"
+            )
+            out[seq_len] = sub
+        else:
+            out[seq_len] = list(indices)
+    return out
+
+
 def _validate_existing_dump(
     dump_path: Path,
     *,
@@ -440,11 +508,33 @@ def main(cfg: DictConfig) -> None:
     # --- Pré-grouping par seq_len ---
     print("Pré-grouping audit_svd par seq_len (formule SSG)…", flush=True)
     t_group = time.perf_counter()
-    seq_len_groups = _group_by_seq_len(audit_indices, sweep_full)
+    seq_len_groups_raw = _group_by_seq_len(audit_indices, sweep_full)
     print(
-        f"  {len(seq_len_groups)} buckets seq_len distincts en "
+        f"  {len(seq_len_groups_raw)} buckets seq_len bruts en "
         f"{time.perf_counter()-t_group:.1f}s : "
-        f"{sorted(seq_len_groups.keys())[:10]}…",
+        f"{sorted(seq_len_groups_raw.keys())[:10]}…",
+        flush=True,
+    )
+    # Application des caps (skip + size + count). Logge à stderr les buckets
+    # affectés.
+    skip_seq_len_above = OmegaConf.select(cfg, "extraction.skip_seq_len_above")
+    max_bucket_size_gb = OmegaConf.select(cfg, "extraction.max_bucket_size_gb")
+    max_examples_per_bucket = OmegaConf.select(cfg, "extraction.max_examples_per_bucket")
+    seq_len_groups = _apply_bucket_caps(
+        seq_len_groups_raw,
+        L=cfg.model.n_layers,
+        H=cfg.model.n_heads,
+        skip_seq_len_above=(int(skip_seq_len_above) if skip_seq_len_above is not None else None),
+        max_bucket_size_gb=(float(max_bucket_size_gb) if max_bucket_size_gb is not None else None),
+        max_examples_per_bucket=(int(max_examples_per_bucket) if max_examples_per_bucket is not None else None),
+        seed=cfg.ssg.seed_train,
+    )
+    n_examples_kept = sum(len(v) for v in seq_len_groups.values())
+    n_examples_raw = sum(len(v) for v in seq_len_groups_raw.values())
+    print(
+        f"  Après caps : {len(seq_len_groups)} buckets, "
+        f"{n_examples_kept}/{n_examples_raw} exemples conservés "
+        f"({100*n_examples_kept/max(n_examples_raw,1):.1f}%)",
         flush=True,
     )
 
@@ -485,7 +575,12 @@ def main(cfg: DictConfig) -> None:
             {
                 "oracle_checkpoint": str(oracle_checkpoint),
                 "n_audit_examples": len(audit_indices),
-                "n_seq_len_buckets": len(seq_len_groups),
+                "n_seq_len_buckets_raw": len(seq_len_groups_raw),
+                "n_seq_len_buckets_kept": len(seq_len_groups),
+                "n_examples_after_caps": n_examples_kept,
+                "skip_seq_len_above": str(skip_seq_len_above),
+                "max_bucket_size_gb": str(max_bucket_size_gb),
+                "max_examples_per_bucket": str(max_examples_per_bucket),
                 "batch_size_cap": cap_batch,
                 "extractor_fp64": extractor_cfg.fp64,
                 "resume_skip_existing": str(resume_skip_existing),
