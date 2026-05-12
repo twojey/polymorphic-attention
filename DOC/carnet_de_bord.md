@@ -22,9 +22,9 @@ Journal vivant du projet *Attention Superlinéaire Polymorphe*. Capture le proce
 |---|---|---|---|
 | H1 | Les matrices d'attention de l'Oracle dense exhibent un rang Hankel ≪ N **ou** une entropie spectrale ≪ log N sur une portion non-triviale du sweep SSG | 1 | **VALIDÉE qualitativement** (run e2f0b5e, 2026-05-10) |
 | H2 | Au moins un signal local parmi {S_KL, S_Grad, S_Spectral} prédit le rang structurel avec ρ_Spearman > 0.70 sur ω ou Δ, ET ρ_ℋ < 0.20 | 1.5 | **VALIDÉE V1 sur S_Spectral seul, fragile** au point (K=64, bench Δ∈[16,64,256]). S_Grad exclu (§8 piège 5). **Run 1 NO-GO** Δ≤64 K=64 (`5e5ead1e`, ρ_Δ=0.704 ✅, \|ρ_ℋ\|=0.245 ❌). **Run 2 GO** Δ étendu K=64 (`389383a2`, ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅). **Run 3 FINISHED 20:07 UTC** pod CPU, S_KL option C testé (`b0243f3a`, n=2000, n_calib=256, durée 4h59) : **S_KL NO-GO** (ρ_Δ=0.335 ❌ très loin), S_Spectral reproduit Run 2 (ρ_Δ=0.709 ✅, \|ρ_ℋ\|=0.163 ✅), `retained_signals=S_Spectral`, `status=exploratory` (git dirty au lancement → ne compte pas pré-enregistré strict). **Run 4 NO-GO sensitivity** K=32 (`87ebc2d0`, ρ_Δ=0.654 ❌). **Bilan : 1 seul signal (S_Spectral) × 1 seul point de calibration valide. Pas de signal indépendant pour consolider.** |
-| H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | à tester post-phase 1.5 |
-| H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | à tester post-phase 1.5 |
-| H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | à tester post-phase 1.5 |
+| H3 | La SCH se vérifie comme distribution avec IQR raisonnable par rapport à la médiane (V3.5 : pas comme fonction) | 2 | **VALIDÉE forte** 2026-05-12 (run pod RTX 5090, commit `288e1b7`) : r_eff médian = **2**, max = 13 sur 485 376 matrices ; 78.9 % r_eff ≤ 3, 99.8 % ≤ 10. Concentration prédictible reproductible. Cf. [rapport phase 2](reports/phase2.md). |
+| H4 | Le catalogue {Toeplitz, Hankel, Cauchy, compositions} couvre la majorité des régimes (ε_C résiduel < 0.30) | 2 | **REJETÉE sur sous-catalogue testé** (Toeplitz, Hankel, Identity, composition T+H) : orphan_ratio = 1.000/1.000. ε_best min = 0.45, médian = 0.98. ⚠ **MAIS** : seules 3 classes sur ~17 prévues (DOC/00b) ont été testées. Cauchy / Vandermonde / Banded / Block-sparse / Butterfly / Monarch NON testés. Verdict honnête : "non couvert par sous-catalogue de 3 projecteurs", pas "non couvert par le catalogue complet". Dette V2 : implémenter projecteurs manquants (Cauchy prime suspect vu résidu rank-1). |
+| H5 | La loi de transfert `r_eff = a × (1+ω)^α × (1+Δ)^β × exp(γ·ℋ)` a des exposants reproductibles | 2 | **Non concluant** : r_eff varie peu (1-13 sur 99.93 %) → signal compressé pour la régression log-linéaire. À refaire offline avec calibration différente, ou abandonner H5 sur SMNIST seul. |
 | H6 | Les exposants sont **universels cross-domain** (verdict `cross_domain_compare`) | 2 | Sprint 4 (multi-Oracle) |
 | H7 | Test 6c : ASP avec R_max = r_med/2 atteint ≥ 95 % qualité Oracle | 5 | Sprint 4 |
 
@@ -39,6 +39,98 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 ---
 
 ## Décisions actées (chronologique inverse)
+
+### 2026-05-12 ~09:15 UTC — Phase 2 verdict + dette technique catalogue
+
+**#milestone #phase2 #verdict** Phase 2 audit spectral terminée sur pod RTX 5090 après ~3h de debug/run (5 versions v1-v8 dont 4 killed pour bugs). Verdict produit, rapport [DOC/reports/phase2.md](reports/phase2.md) instancié.
+
+**Résultat scientifique brut** (sur 10 112 ex × 6 L × 8 H = 485 376 matrices d'attention) :
+
+| Mesure | Valeur |
+|---|---|
+| r_eff médian (θ=0.99) | **2.0** |
+| r_eff mean | 2.52 |
+| r_eff max | **13** |
+| % matrices r_eff ≤ 3 | **78.9 %** |
+| % matrices r_eff ≤ 10 | 99.8 % |
+| ε_best min (batterie A) | 0.452 |
+| ε_best médian | 0.983 |
+| orphan_ratio (seuil 0.30) | **1.000 / 1.000** |
+
+**Lecture en deux temps** :
+
+1. **SCH au sens rang faible** : **VALIDÉE forte**. La distribution r_eff est ultra concentrée (78.9 % à r ≤ 3), reproductible, et r_eff ≪ N partout. La hypothèse centrale "low-rank" tient.
+
+2. **SCH au sens catalogue V1 {Toeplitz, Hankel, Identity}** : **REJETÉE**. Aucun régime ne fitte ε < 0.30. Class winners : Toeplitz 67 %, Hankel 33 %, mais même le meilleur cas (L=3 ω=2 Δ=0) reste à ε=0.45.
+
+**🚨 Dette méthodologique majeure (relevée par l'utilisateur 2026-05-12 11:25)** : **on n'a testé que ~10-15 % du catalogue prévu** (DOC/00b §B+O+P+T+U). Manquent :
+- **B3 Cauchy** (rang de déplacement ≤ 1) — prime suspect vu le signal résidu rank-1
+- **B3 Vandermonde**
+- **B5 Block-diagonal**, **B6 Banded** (attention locale)
+- **U1-U5** : Butterfly, Monarch, Pixelfly, Block-sparse, Sparse+low-rank
+- **T** : équivariances, circulantes
+- **P** : Ho-Kalman block + HSV (ordre minimal)
+
+Le verdict "100 % orphan" est donc à **lire restreint** : 100 % orphan **du sous-catalogue de 3 projecteurs**. Pas un verdict sur "hors catalogue absolu". Pour trancher l'identification structurelle, il faut implémenter les projecteurs manquants en V2.
+
+**Signal scientifique** : la **batterie B montre `svd_top1_ratio = 1.000` sur tous les résidus testés** → la "vraie" structure est probablement rank-1 / outer product (cohérent avec Cauchy non testée). C'est une piste forte à creuser au prochain audit.
+
+**Autres résultats notables** :
+- **0/48 têtes dormantes**, top spec_h = 5.14 (Tête L=0 H=2). Layer 0 concentre 4/8 top têtes spécialisées.
+- **Asymétrie eigen/SVD = 1.33** (forte) → cohérent avec attention post-softmax (causalité + sparsité)
+- Layers 2-5 stables à r_eff mean ≈ 2.0 ; layer 0 plus diffus (r_eff = 4.10)
+
+**Conséquences pour ASP phase 3** :
+- **Backbone = `IdentityBackbone`** : catalogue V1 réfuté, ΔAttn = U·Vᵀ doit tout porter
+- **R_max = 32** : avec r_eff max = 13 + marge 2.5×
+- **Smart Init prometteur** : Layer 0 têtes 2,3,4,5 sont les vecteurs à extraire en priorité
+- Coût phase 3 : ~1-3h supplémentaires sur pod RTX 5090
+
+**Limitations à documenter sans masquer** (cf. rapport §Limitations) :
+- `status=exploratory` (git dirty au lancement) → pas registered strict
+- Diagnostic découplage S_Spectral non calculé (multiprocessing trop lent — dette technique)
+- 1 seul Oracle (SMNIST) — universalité cross-domain reportée Sprint 4
+- Δ=1024 droppé (8 TB FP64 sinon)
+- **Catalogue 10 % testé** (cf. point principal ci-dessus)
+
+**Robustesse infra acquise** (cf. [feedback_script_robustness.md](memory MEMORY)) :
+- Checkpoint/resume phase 2 implémenté (atomic save → `_phase2_state/svd_r_eff.pt` + `batteries_results.pt`) après ~25 min perdus 2x
+- Caps configurables `skip_seq_len_above`, `max_bucket_size_gb`, `max_examples_metrics`, `decoupling.max_seq_len`
+- MLflow log_artifact opt-in (`mlflow_log_dumps: false`) — disque pod ne sature plus
+- Bug fix : `bool(X or True)` → `OmegaConf.select(..., default=True)` pour `decoupling.enabled=false`
+- Phase 3 driver complet + checkpoint per epoch + tests verts (30) prêt à lancer dès post-phase-2
+
+### 2026-05-12 ~07:00 UTC — Run pod RTX 5090 : full extract + phase 2 en cours
+
+**#milestone #phase2 #pod** Pod RunPod RTX 5090 (vCPU 16, 125 GB RAM, 110 GB workspace, torch 2.11.0+cu128 sm_120 Blackwell). Drivée via SSH directe depuis le VPS (`ssh -p 17157 root@74.2.96.28`).
+
+**Bugs débloqués au smoke** (6 commits incrémentaux durant le run) :
+
+1. **launch_extract.sh** : `oracle_checkpoint=` rejeté par Hydra (struct mode). Fix : préfixe `+` (override-or-add).
+2. **audit.yaml** : `defaults: thresholds_phase2: thresholds_phase2` cherchait un sous-dossier inexistant. Fix : `- thresholds_phase2@thresholds_phase2`.
+3. **`_log_bucket_metrics`** : `hankel_rank_of_attention` a une double boucle Python (B × N) appelant SVD par row → impraticable sur grands N. Fix double : (a) subsample à 32 ex, (b) skip si seq_len > 250.
+4. **`mlflow.log_artifact`** : copiait chaque dump dans `/workspace/mlruns/` → disk explosé à 89 GB. Fix : log_artifact opt-in (`extraction.mlflow_log_dumps: false` par défaut).
+5. **`svd_attention` GPU** : `torch.linalg.svdvals` tombait en fallback interne lent sur matrices d'attention rank-deficient (cusolver convergence fail). Fix : bypass via `eigvalsh(A·Aᵀ + εI)` direct, plus rapide et stable.
+6. **`eigvalsh` GPU sur seq=1287** : ridge ε=1e-7 FP32 insuffisant, crash `linalg.eigh: ill-conditioned`. Fix : retry escalation ε × 1, 1000, 1M puis fallback `svdvals`.
+
+**Caps disque appliqués** (`OPS/configs/phase1/oracle_smnist.yaml`) :
+- `extraction.skip_seq_len_above=2000` → drop Δ=1024 (seq=5127, ~8 TB FP64 sinon)
+- `extraction.max_bucket_size_gb=15.0` → cap auto par bucket (seq=87 à 5160 ex, seq=1287 à 23 ex)
+- `extraction.mlflow_log_dumps=false` → pas de duplication MLflow
+
+**État d'avancement (07:25 UTC)** :
+- ✅ Full extraction phase 1 V2 : 9 buckets, 83.4 GB sur disk pod, 55.9s wall-clock (resume après les caps appliqués)
+- 🔄 Full phase 2 audit spectral en cours : 7/9 SVD GPU FP32 finis (seq=7,19,53,87,155,223,291), reste seq=327 + seq=1287 + batteries + diagnostic découplage S_Spectral↔r_eff
+- ⏳ Verdict phase 2 attendu d'ici ~10 min
+
+**Smoke phase 2 (sur 4 petits buckets seq≤87)** verdict NO-GO avec :
+- `ρ_global(r_eff, S_Spectral) = +0.207` IC95 [-0.173, +0.538] n=30 → verdict=DECOUPLED
+- 24 régimes batterie A/B/D (4 buckets × 6 layers), 0/48 têtes dormantes, top spec_h tête (L=0, H=2) = 2.89
+- Smoke n'est PAS représentatif du verdict final (4 petits buckets sans Δ varié). À évaluer sur full.
+
+**Statut manifest** : `git_dirty=True` au lancement des smoke et du full (rsync `.git/` partiel) → `status=exploratory` à nouveau. À noter dans rapport ; rerun "registered strict" possible une fois logique stabilisée.
+
+**Pod coût estimé final** : ~$1.50 (~3h actif total).
 
 ### 2026-05-12 — Pré-pod phase 2 : diagnostic découplage + durcissement drivers
 
