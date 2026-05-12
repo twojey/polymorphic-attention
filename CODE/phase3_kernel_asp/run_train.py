@@ -51,6 +51,7 @@ from phase1_metrologie.ssg.structure_mnist import (
     split_indices,
     sweep_monovariate,
 )
+from phase3_kernel_asp.checkpoint import Phase3State
 from phase3_kernel_asp.losses import (
     loss_consistency,
     loss_matriochka,
@@ -331,6 +332,32 @@ def main(cfg: DictConfig) -> None:
     lam_C = float(cfg.loss.consistency.weight)
     R_max = cfg.asp_layer.R_max
 
+    # --- Checkpoint state (cf. feedback_script_robustness §2) ---
+    state_dir = Path(
+        OmegaConf.select(cfg, "checkpoint.dir")
+        or REPO_ROOT / "OPS" / "logs" / "phase3_state"
+    )
+    state, is_resumed = Phase3State.create_or_resume(
+        state_dir,
+        R_max=R_max,
+        d_model=cfg.model.d_model, n_layers=cfg.model.n_layers,
+        backbone_class=cfg.backbone.class_name,
+        init_strategy=cfg.asp_layer.init_strategy,
+    )
+    resume_enabled = bool(OmegaConf.select(cfg, "checkpoint.enabled") or True)
+    if not resume_enabled:
+        state.clean()
+        state, is_resumed = Phase3State.create_or_resume(
+            state_dir,
+            R_max=R_max, d_model=cfg.model.d_model, n_layers=cfg.model.n_layers,
+            backbone_class=cfg.backbone.class_name,
+            init_strategy=cfg.asp_layer.init_strategy,
+        )
+    print(
+        f"[checkpoint] state_dir={state_dir} resume={is_resumed}",
+        flush=True,
+    )
+
     with start_run(
         experiment="phase3", run_name=manifest.run_id,
         phase="3", sprint=cfg.sprint, domain=cfg.domain,
@@ -357,12 +384,36 @@ def main(cfg: DictConfig) -> None:
                      "oracle_val_acc", oracle_acc)
         print(f"Oracle val acc baseline : {oracle_acc:.4f}", flush=True)
 
-        # --- Training loop ---
+        # --- Training loop (avec checkpoint per epoch + resume) ---
         n_epochs = int(cfg.training.max_epochs)
         log_interval = int(cfg.training.log_interval_steps)
         step = 0
         best_val_acc = 0.0
-        for epoch in range(n_epochs):
+        start_epoch = 0
+        if is_resumed and state.has_latest():
+            try:
+                meta = state.load_latest(model=asp, optimizer=opt)
+                start_epoch = int(meta["epoch"]) + 1
+                step = int(meta["step"])
+                best_val_acc = float(meta["best_val_acc"])
+                print(
+                    f"[checkpoint] resumed from epoch {meta['epoch']} step {step}, "
+                    f"best_val_acc={best_val_acc:.4f}",
+                    flush=True,
+                )
+                if start_epoch >= n_epochs:
+                    print(
+                        f"[checkpoint] training déjà fini ({start_epoch}/{n_epochs}). "
+                        f"Va directement aux sanity checks.",
+                        flush=True,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                _stderr(
+                    f"[checkpoint] échec load_latest : {type(exc).__name__}: {exc}. "
+                    f"Restart from epoch 0."
+                )
+                traceback.print_exc(file=sys.stderr, limit=3)
+        for epoch in range(start_epoch, n_epochs):
             asp.train()
             t_epoch = time.perf_counter()
             for batch in train_loader:
@@ -431,7 +482,30 @@ def main(cfg: DictConfig) -> None:
                 f"(oracle={oracle_acc:.4f}) durée {elapsed:.1f}s ===",
                 flush=True,
             )
+            improved = val_acc > best_val_acc
             best_val_acc = max(best_val_acc, val_acc)
+
+            # Checkpoint per epoch — robustesse §2 (feedback_script_robustness)
+            try:
+                state.save_latest(
+                    model=asp, optimizer=opt, epoch=epoch, step=step,
+                    best_val_acc=best_val_acc, oracle_acc=oracle_acc,
+                )
+                if improved:
+                    state.save_best(
+                        model=asp, optimizer=opt, epoch=epoch, step=step,
+                        val_acc=val_acc, oracle_acc=oracle_acc,
+                    )
+                    print(
+                        f"[checkpoint] best.pt updated (val_acc={val_acc:.4f})",
+                        flush=True,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                _stderr(
+                    f"[checkpoint] save échec : {type(exc).__name__}: {exc}. "
+                    f"Continue mais sans persistance epoch {epoch}."
+                )
+                traceback.print_exc(file=sys.stderr, limit=3)
 
         # --- Sanity checks ---
         print("\n[sanity] checks ASPLayer (saturation, effondrement, monotonie, lissité)…")

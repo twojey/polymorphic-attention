@@ -98,3 +98,14 @@ sanity:
   saturation_tolerance: 0.10
   smoothness_max_jump: 0.5
   rank_grid_steps: 8
+
+# --- Checkpoint / resume (DOC/feedback_script_robustness §2) ---
+# Sauvegarde model + optimizer state après chaque epoch dans state_dir.
+# Latest + best (val_acc) atomic via rename. Resume au lancement si
+# fingerprint compatible (R_max, d_model, n_layers, backbone_class).
+checkpoint:
+  enabled: true
+  # dir : null → OPS/logs/phase3_state/ par défaut
+  dir: null
+  # mlflow_log : copie best.pt + latest.pt vers MLflow artifacts (gros, opt-in)
+  mlflow_log: false
