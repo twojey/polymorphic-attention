@@ -40,6 +40,55 @@ Cf. discussion exhaustive 2026-05-10 (avancement).
 
 ## Décisions actées (chronologique inverse)
 
+### 2026-05-12 ~17:00 UTC — Vague V3 : catalogue 131 Properties complet (33 ajouts)
+
+**#milestone #catalog #v3** Finalisation du catalogue exhaustif : passage de **98 → 131 Properties** (33 ajouts répartis sur 16 familles). Le pivot stratégique impose que la classification cross-Oracle puisse interroger l'attention sur **toutes les classes mathématiques candidates**, pas juste celles déjà codées.
+
+**Réparation par famille** (équilibrage 4+ Properties minimum) :
+
+| Famille | Avant | Après | Ajouts |
+|---|---|---|---|
+| A spectrales | 5 | **7** | A2 stable_rank, A7 d_eff Rényi-2 |
+| D géométriques | 3 | **6** | D4 frobenius_baseline, D5 nuclear_norm, D6 Grassmann |
+| E information | 2 | **5** | E3 redundancy, E4 mdl_proxy, E5 entropy_rate |
+| F dynamiques | 2 | **4** | F3 jacobian_proxy, F4 lyapunov_proxy |
+| H cross-layer | 4 | **6** | H5 deep_residual_norm, H6 attention_sink_score |
+| I cross-head | 3 | **5** | I4 head_agreement, I5 head_redundancy |
+| J Markov | 4 | **5** | J5 spectral_gap |
+| K graph | 4 | **5** | K5 cheeger_constant |
+| L fréquence | 3 | **5** | L4 dct_energy, L5 spectral_peaks |
+| M conditionnelles | 2 | **4** | M3 input_dependence, M4 token_class_sensitivity |
+| N comparatives | 3 | **4** | N4 prediction_agreement |
+| P réalisation | 6 | **7** | P7 markov_realization_test |
+| Q hiérarchiques | 5 | **6** | Q6 hss_off_diagonal_rank |
+| R RKHS | 4 | **6** | R5 gaussian_kernel_test, R6 spectral_kernel_proxy (Nyström) |
+| S tenseurs | 3 | **5** | S4 cp_rank_proxy (ALS), S5 unfolding_rank |
+| T équivariances | 2 | **4** | T3 cyclic_equivariance, T4 reflection_equivariance |
+| V opérateurs | 3 | **5** | V4 commutator_norm, V5 schatten_p_norm |
+| W logique | 3 | **5** | W4 nip_score (composite), W5 vc_proxy (max shattered n) |
+| **TOTAL** | **98** | **131** | **+33** |
+
+**Choix scientifique des ajouts** : équilibrer chaque famille à ≥ 4 Properties pour donner au Sprint C une **base de classification fiable**. Évite le piège phase 2 V1 (verdict "100 % orphan" sur 2 % du catalogue → non-rigoureux).
+
+**Mutualisation cache SVD** : 9 Properties (A1-A7, D5, E2, E4, R4, V5) partagent `svdvals_cached(A)` → 1 SVD par régime/layer au lieu de 9.
+
+**Tests** : 45 nouveaux tests (`test_completion_v3.py`), **719 tests verts total** (vs 674 fin précédente), 0 régression sur les 98 Properties préexistantes.
+
+**Conformité spec** : le CATALOGUE.md annonçait "130+ items, 23 catégories A-W + N". Le compte est désormais exact : **131 Properties** registered (vérifié via `REGISTRY.all()`).
+
+**Conséquence pour Sprint C (pod)** : la batterie research peut désormais interroger les 131 propriétés × 9 dumps SMNIST × 5 Oracles. Si "100 % orphan" survient cette fois, ce sera un verdict scientifique solide (pas un artefact de couverture partielle).
+
+**Décisions techniques** :
+- F3/F4 Jacobian/Lyapunov : proxies à coût O(N²) (pas Jacobien explicite)
+- S4 CP-rank : ALS avec n_iter=20 par défaut, cost_class=4 (à utiliser level=research uniquement)
+- R6 Nyström : skip si m_sample = N (trivial)
+- W4 NIP score : rank-finding sur shattered ratio vs log(n), borne IP = n_max / log(n_max)
+- N4 prediction agreement : skip si student_attn absent (cf. N1)
+
+**Prochaine étape** : commit + ready-to-pod Sprint C.
+
+---
+
 ### 2026-05-12 ~14:00 UTC — Refactor architecture `catalog/` : scaffold deepening posé
 
 **Trigger** : suite au pivot Partie 1 prioritaire (cf. ~11:00 UTC), le code legacy `phase2_audit_spectral/` et `phase3_kernel_asp/` est trop monolithique pour porter 131 propriétés × 4 oracles × 5 niveaux de battery. Refactor architectural avant de dérouler Sprint A1.

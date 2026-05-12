@@ -13,7 +13,7 @@ Le projet produit **deux livrables scientifiques distincts** :
 
 Catalogue exhaustif : [`CATALOGUE.md`](CATALOGUE.md) (~131 propriétés × 23 catégories A-W + N).
 
-**État implémentation** : **98 Properties codées sur 23 familles** (75 % couverture, fin session 2026-05-12). 5 Oracle adapters (Synthetic, SMNIST, LL, Vision, Code), 10 Sprint runners, 6 scripts de génération livrables.
+**État implémentation** : **131 Properties codées sur 23 familles A-W + N** (catalogue complet, fin session 2026-05-12). 5 Oracle adapters (Synthetic, SMNIST, LL, Vision, Code), 10 Sprint runners, 6 scripts de génération livrables.
 
 🟢 **Ne peut pas "fail"** — chaque mesure (positive ou négative) enrichit la classification. Publication indépendante possible : *"Mathematical Signatures of Attention Across Domains"*.
 
@@ -69,7 +69,7 @@ Conditionné à la réussite de la Partie 1. Alternative parmi d'autres (kernel 
 ### **Scientifique (comprendre le "quoi")**
 1. Lire cette page (vous y êtes)
 2. [`00_FONDATIONS.md`](00_FONDATIONS.md) — la thèse en 20 min
-3. [`CATALOGUE.md`](CATALOGUE.md) § Propriétés — les 131 mesures (98 implémentées)
+3. [`CATALOGUE.md`](CATALOGUE.md) § Propriétés — les 131 mesures (toutes implémentées)
 4. [`FALSIFIABILITE.md`](FALSIFIABILITE.md) — critères succès/échec
 5. [`paper/partie1/outline.md`](paper/partie1/outline.md) — plan publication Partie 1
 
@@ -125,4 +125,4 @@ Commencer par phase 1 : [`01_phase_metrologie.md`](01_phase_metrologie.md)
 
 ---
 
-**Version** : 2026-05-12 fin session | **Consolidation** : 4 fichiers fusionnés en 1 point d'entrée | **Code** : 674 tests verts, 98 Properties, scaffolding complet ready-to-pod
+**Version** : 2026-05-12 fin session | **Consolidation** : 4 fichiers fusionnés en 1 point d'entrée | **Code** : 719 tests verts, **131 Properties** (catalogue complet), scaffolding complet ready-to-pod

@@ -28,7 +28,7 @@ polymorphic-attention/
 CODE/
 ├── shared/                  # Primitives réutilisables (cross-module)
 ├── infra/                   # Machine profile / hardware detection
-├── catalog/                 # ⭐ Catalogue Partie 1 — 98 Properties / 23 familles
+├── catalog/                 # ⭐ Catalogue Partie 1 — 131 Properties / 23 familles (complet)
 ├── sprints/                 # ⭐ Orchestrateurs Sprint (B/C/D/E/F/G/S4-S7)
 ├── livrables/               # ⭐ Génération artefacts scientifiques (paper, tables)
 ├── phase1_metrologie/       # Phase 1 — Oracle SMNIST + extraction
@@ -71,32 +71,32 @@ catalog/
 ├── report.py                # Génération rapport Markdown
 ├── cross_oracle.py          # Comparaison signatures cross-Oracle
 │
-├── properties/              # 98 Properties classifiées 23 familles (A-W + N)
+├── properties/              # 131 Properties classifiées 23 familles (A-W + N) — catalogue complet
 │   ├── base.py              # Property abstract + PropertyContext + scope Literal
 │   ├── registry.py          # PropertyRegistry singleton + @register_property
-│   ├── family_a_spectral/   # A1-A6 : r_eff, condition, entropy, decay, PR
-│   ├── family_b_structural/ # B0-B9 : identity, Toeplitz, Hankel, Cauchy, sparse, banded, etc.
-│   ├── family_c_token_stats/ # C1-C9 : KL, entropies, Fisher, Wasserstein, S_Grad
-│   ├── family_d_geometric/  # D1-D3 : cosine, distance, subspace angles
-│   ├── family_e_information/ # E1-E2 : mutual info, compressibility
-│   ├── family_f_dynamic/    # F1-F2 : Lipschitz, temporal stability
-│   ├── family_g_algebraic/  # G1-G8 : trace/det, symmetry, idempotence, charpoly, B-S, D-module, syzygies
-│   ├── family_h_cross_layer/ # H1-H4 : residual, composition, r_eff trajectory, convergence
-│   ├── family_i_cross_head/ # I1-I3 : diversity, specialization, clustering
-│   ├── family_j_markov/     # J1-J4 : convergence A^k, stationary, mixing, reversibility
-│   ├── family_k_graph/      # K1-K4 : Laplacian, persistent homology, PageRank, modularity
-│   ├── family_l_frequency/  # L1-L3 : FFT2D, wavelets, quasi-periodicity
-│   ├── family_m_conditional/ # M1-M2 : token type sensitivity, stress variation
-│   ├── family_n_comparative/ # N1-N3 : F-divergence, preservation, Lipschitz diff (Oracle/student)
-│   ├── family_o_displacement/ # O1-O5 : Toeplitz/Cauchy/Vandermonde rank, Kailath generators, Pan
-│   ├── family_p_realization/ # P1-P6 : Hankel realization, HSV, decay, min order, hier blocks, gramians
-│   ├── family_q_hierarchical/ # Q1-Q5 : H-matrix, HSS, nestedness, H-distribution
-│   ├── family_r_rkhs/       # R1-R4 : Mercer PSD, RFF, Bochner, truncated energy
-│   ├── family_s_tensors/    # S1-S3 : Tucker, Tensor Train, Hierarchical Tucker
-│   ├── family_t_equivariance/ # T1-T2 : permutation, subgroup
-│   ├── family_u_sparse_structured/ # U1-U5 : Butterfly, Monarch, Block-sparse, Pixelfly, Sparse+LR
-│   ├── family_v_operators/  # V1-V3 : pseudo-diff, CZ decay, compactness
-│   └── family_w_logic/      # W1-W3 : pattern complexity, dependence proxy, NIP/VC-shatter
+│   ├── family_a_spectral/   # 7 : A1-A7 (r_eff, stable_rank, condition, entropy, decay, PR, d_eff Rényi-2)
+│   ├── family_b_structural/ # 10 : B0-B9 (identity, Toeplitz, Hankel, Cauchy, sparse, banded, ...)
+│   ├── family_c_token_stats/ # 9 : C1-C9 (KL, entropies, Fisher, Wasserstein, S_Grad)
+│   ├── family_d_geometric/  # 6 : D1-D6 (cosine, baseline, subspaces, frobenius rnd, nuclear, Grassmann)
+│   ├── family_e_information/ # 5 : E1-E5 (mutual, compressibility, redundancy, MDL, entropy rate)
+│   ├── family_f_dynamic/    # 4 : F1-F4 (Lipschitz, temporal, Jacobian softmax, Lyapunov proxy)
+│   ├── family_g_algebraic/  # 8 : G1-G8 (trace/det, symmetry, idempotence, charpoly, B-S, D-module, syzygies)
+│   ├── family_h_cross_layer/ # 6 : H1-H6 (residual, composition, r_eff traj, convergence, deep residual, sink)
+│   ├── family_i_cross_head/ # 5 : I1-I5 (diversity, specialization, clustering, agreement, redundancy)
+│   ├── family_j_markov/     # 5 : J1-J5 (convergence, stationary, mixing, reversibility, spectral gap)
+│   ├── family_k_graph/      # 5 : K1-K5 (Laplacian, persistent homology, PageRank, modularity, Cheeger)
+│   ├── family_l_frequency/  # 5 : L1-L5 (FFT2D, wavelets, periodicity, DCT-II, spectral peaks)
+│   ├── family_m_conditional/ # 4 : M1-M4 (token type, stress, input dep, token class sensitivity)
+│   ├── family_n_comparative/ # 4 : N1-N4 (F-div, preservation, Lipschitz diff, prediction agreement)
+│   ├── family_o_displacement/ # 5 : O1-O5 (Toeplitz/Cauchy/Vandermonde rank, Kailath, Pan)
+│   ├── family_p_realization/ # 7 : P1-P7 (Hankel real., HSV, decay, min order, hier blocks, gramians, Markov real.)
+│   ├── family_q_hierarchical/ # 6 : Q1-Q6 (H-matrix, HSS, nestedness×2, H-dist, off-diagonal rank)
+│   ├── family_r_rkhs/       # 6 : R1-R6 (Mercer, RFF, Bochner, truncated, Gauss test, Nyström spectrum)
+│   ├── family_s_tensors/    # 5 : S1-S5 (Tucker, Tensor Train, Hier Tucker, CP-rank ALS, pair unfoldings)
+│   ├── family_t_equivariance/ # 4 : T1-T4 (permutation, subgroup, cyclic, reflection)
+│   ├── family_u_sparse_structured/ # 5 : U1-U5 (Butterfly, Monarch, Block-sparse, Pixelfly, Sparse+LR)
+│   ├── family_v_operators/  # 5 : V1-V5 (pseudo-diff, CZ decay, compactness, commutator, Schatten p)
+│   └── family_w_logic/      # 5 : W1-W5 (pattern, dep proxy, NIP/VC-shatter, NIP score, VC proxy)
 │
 ├── oracles/                 # Adapters Oracle (interface AbstractOracle)
 │   ├── base.py              # AbstractOracle + AttentionDump + RegimeSpec
@@ -376,7 +376,7 @@ Les trois dossiers `CODE/`, `DOC/`, `OPS/` sont **figés** au niveau racine :
 
 | Bloc | État | Notes |
 |---|---|---|
-| **Catalog Properties** | ✅ 98 / ~131 (75 %) | 23 familles A-W + N |
+| **Catalog Properties** | ✅ **131 / 131 (100 %)** | 23 familles A-W + N, catalogue complet |
 | **Catalog Oracles** | ✅ 5 adapters | Synthetic, SMNIST, LL, Vision, Code (3 nouveaux squelettes complets) |
 | **Catalog Battery** | ✅ + parallel | n_workers > 1 dispatch ThreadPoolExecutor |
 | **Catalog Projectors** | ✅ 8 | Toeplitz, Hankel, Cauchy, Banded, Block-diag, Butterfly, Monarch, Pixelfly |
@@ -389,7 +389,7 @@ Les trois dossiers `CODE/`, `DOC/`, `OPS/` sont **figés** au niveau racine :
 | **Phase 3** | 🔄 Squelette | Sprint D = backbone informé Sprint C |
 | **Phase 4** | 🔄 Squelette | Sprints E + F |
 | **Phase 5** | 🔄 Squelette | Sprint G |
-| **Tests** | ✅ 674 verts | + 1 skip OPENBLAS |
+| **Tests** | ✅ **719 verts** | + 1 skip OPENBLAS |
 | **Doc** | ✅ Tous templates | + 2 outlines paper |
 | **Robustesse** | ✅ retry + logs + manifest | Pré-pod ready |
 

@@ -12,7 +12,7 @@
 
 | Bloc | État | Détails |
 |---|---|---|
-| **Properties Catalog** | ✅ 98 / ~131 (75 %) | 23 familles A-W + N |
+| **Properties Catalog** | ✅ **131 / 131 (100 %)** | 23 familles A-W + N, catalogue complet |
 | **Oracles adapters** | ✅ 5 | Synthetic, SMNIST + 3 nouveaux complets (LL, Vision, Code) |
 | **Battery** | ✅ + parallèle | `n_workers > 1` ThreadPoolExecutor |
 | **Projectors** | ✅ 8 | Toeplitz, Hankel, Cauchy, Banded, Block-diag, Butterfly, Monarch, Pixelfly |
@@ -24,7 +24,7 @@
 | **Phase 1.5** | ✅ Calibré | 3 signaux validés |
 | **Phase 2-5** | 🔄 Squelettes | Code complet, run = Sprint B-G sur pod |
 | **Paper outlines** | ✅ 2 | Partie 1 + Partie 2 |
-| **Tests** | ✅ 674 verts | + 1 skip OPENBLAS |
+| **Tests** | ✅ **719 verts** | + 1 skip OPENBLAS |
 
 ---
 
@@ -90,7 +90,7 @@ PYTHONPATH=CODE uv run python -m livrables.partie2_asp_verdict \
 - **Template rapport** : `DOC/reports/sprints/sprint_b_template.md`
 
 ### Sprint C — Battery research × dumps
-- **Objectif** : 98 Properties sur 9 dumps → signatures complètes SMNIST
+- **Objectif** : 131 Properties sur 9 dumps → signatures complètes SMNIST
 - **Pré-requis** : Sprint B
 - **Compute** : ~1 sem CPU, $5-10
 - **Output** : `results.json` + `report.md` Markdown

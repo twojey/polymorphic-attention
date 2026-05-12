@@ -14,8 +14,8 @@ CODE/
 ├── shared/                          # Primitives réutilisables (checkpoint, retry, logging, mlflow)
 ├── infra/                           # MachineProfile (hardware abstraction)
 │
-├── catalog/                         # ⭐ Catalogue Partie 1 — 98 Properties / 23 familles
-│   ├── properties/                  # 98 Properties classées A-W + N
+├── catalog/                         # ⭐ Catalogue Partie 1 — 131 Properties / 23 familles
+│   ├── properties/                  # 131 Properties classées A-W + N (catalogue complet)
 │   ├── oracles/                     # 5 adapters : Synthetic, SMNIST, LL, Vision, Code
 │   ├── batteries/                   # Battery + levels (minimal → research) + n_workers parallel
 │   ├── projectors/                  # 8 projectors structurés
@@ -48,7 +48,7 @@ Chaque sous-dossier contient un README qui décrit l'attendu de la phase et les 
 ## Conventions
 
 - **Stack** : PyTorch ≥ 2.11+cu128, Lightning Fabric, Hydra, uv. Voir `OPS/env/STACK.md`.
-- **Tests** : `pytest CODE/`, **674 verts** + 1 skip OPENBLAS (fin session 2026-05-12)
+- **Tests** : `pytest CODE/`, **719 verts** + 1 skip OPENBLAS (catalog 131 props complet)
 - **Logging** : `shared.logging_helpers.setup_logging` + MLflow self-hosted optionnel
 - **Checkpoint** : `shared.checkpoint.Checkpoint` atomic save+resume avec fingerprint
 - **Retry** : `shared.retry.retry` / `retry_call` (backoff exp + jitter)
